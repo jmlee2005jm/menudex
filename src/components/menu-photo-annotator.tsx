@@ -71,7 +71,7 @@ export function MenuPhotoAnnotator({
     setDraft(normalizeRect(dragStart, point));
   }
 
-  async function finishHighlight(event: PointerEvent<HTMLDivElement>) {
+  function finishHighlight(event: PointerEvent<HTMLDivElement>) {
     if (!adding || !dragStart || !draft) {
       return;
     }
@@ -81,9 +81,15 @@ export function MenuPhotoAnnotator({
 
     if (draft.width < 0.005 || draft.height < 0.005) {
       setDraft(null);
+    }
+  }
+
+  async function confirmHighlight() {
+    if (!draft) {
       return;
     }
 
+    setError("");
     const response = await fetch(
       `/api/restaurants/${restaurantId}/menu-photos/${photo.id}/annotations`,
       {
@@ -108,6 +114,13 @@ export function MenuPhotoAnnotator({
     setAnnotations((current) => [...current, data.annotation!]);
     setDraft(null);
     setAdding(false);
+  }
+
+  function cancelHighlight() {
+    setDraft(null);
+    setDragStart(null);
+    setAdding(false);
+    setError("");
   }
 
   async function deleteAnnotation(annotationId: string) {
@@ -162,10 +175,7 @@ export function MenuPhotoAnnotator({
           onPointerDown={beginHighlight}
           onPointerMove={updateHighlight}
           onPointerUp={finishHighlight}
-          onPointerCancel={() => {
-            setDragStart(null);
-            setDraft(null);
-          }}
+          onPointerCancel={() => setDragStart(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -206,22 +216,38 @@ export function MenuPhotoAnnotator({
       ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setAdding((current) => !current);
-            setDraft(null);
-            setDragStart(null);
-            setError("");
-          }}
-          className={`min-h-10 border px-3 text-sm font-medium ${
-            adding
-              ? "border-yellow-500 bg-yellow-100 text-ink"
-              : "border-line bg-white text-ink"
-          }`}
-        >
-          {adding ? "하이라이트 취소" : "하이라이트 추가"}
-        </button>
+        {adding ? (
+          <>
+            <button
+              type="button"
+              onClick={confirmHighlight}
+              disabled={!draft}
+              className="min-h-10 bg-ink px-3 text-sm font-medium text-white disabled:bg-ink/35"
+            >
+              확인
+            </button>
+            <button
+              type="button"
+              onClick={cancelHighlight}
+              className="min-h-10 border border-line bg-white px-3 text-sm font-medium text-ink"
+            >
+              하이라이트 취소
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setAdding(true);
+              setDraft(null);
+              setDragStart(null);
+              setError("");
+            }}
+            className="min-h-10 border border-line bg-white px-3 text-sm font-medium text-ink"
+          >
+            하이라이트 추가
+          </button>
+        )}
         {photo.owner_profile_id === currentProfileId ? (
           <button
             type="button"

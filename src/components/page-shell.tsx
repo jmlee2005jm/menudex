@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { HeaderProfile } from "@/components/header-profile";
 
 export function PageShell({
   children,
@@ -7,12 +8,14 @@ export function PageShell({
   title,
   action,
   titleAction,
+  showProfile = true,
 }: {
   children: ReactNode;
   eyebrow?: string;
   title: string;
   action?: ReactNode;
   titleAction?: ReactNode;
+  showProfile?: boolean;
 }) {
   return (
     <main className="min-h-screen bg-paper text-ink">
@@ -21,7 +24,12 @@ export function PageShell({
           <Link href="/restaurants" className="text-lg font-semibold">
             MenuDex
           </Link>
-          {action ? <div className="shrink-0">{action}</div> : null}
+          {showProfile || action ? (
+            <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
+              {showProfile ? <HeaderProfile /> : null}
+              {action ? <div className="shrink-0">{action}</div> : null}
+            </div>
+          ) : null}
         </header>
 
         <section className="py-6 sm:py-8">

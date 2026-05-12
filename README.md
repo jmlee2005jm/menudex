@@ -20,7 +20,7 @@ Implemented:
 - Supabase Storage upload for menu photos.
 - HEIC/HEIF menu photos are converted to JPEG in the browser before upload.
 - Menu photos display at screen width without horizontal overflow.
-- Rectangular semi-transparent highlights can be drawn on menu photos and deleted later.
+- Rectangular semi-transparent highlights can be drawn, confirmed, canceled, and deleted later.
 - Menu photo upload and optional manual menu entry share one `메뉴 추가` screen.
 - Supabase-backed visit logging with meal type, tried menu, half-star rating, and optional short review.
 - Delete controls for accidental restaurant, menu photo, manual menu, and visit entries.
@@ -36,6 +36,10 @@ Implemented:
 - Menu photos are owned by the profile that uploaded them; only that profile can delete them.
 - Restaurant list can sort by name, latest visit, or visit count, with a compact
   arrow button for direction.
+- Session/profile state is fetched once through a shared app provider, so the
+  header and page content do not duplicate session requests.
+- The restaurant list API returns lightweight visit summary fields instead of
+  full nested visit payloads.
 - Server-side Supabase service-role API routes with owner checks.
 - Graceful Korean setup state when required env vars are missing.
 
@@ -127,10 +131,12 @@ server route handlers.
 - Branches can be separate restaurants.
 - Restaurant address is intentionally omitted for now; use notes or an external map link when needed.
 - Restaurant cards show visit count and latest visit instead of menu coverage.
+- Restaurant card `알려진 메뉴` counts menus logged inside visits across every profile.
 - Restaurant name and branch/place are displayed as separate text treatments.
 - Restaurant categories are split into broad cuisine and food/service type.
 - Restaurant icons are manually uploaded by the user; no logo scraping is used.
 - The first screen is profile selection. Add friends through `프로필 추가`.
+- The selected profile is shown in the header on every view except profile selection.
 - Profiles can be edited or deleted from the profile selection screen.
 - Profile and restaurant icons open a square crop editor before upload.
 - Restaurant detail defaults to `내 기록`; `전체 기록` includes friends' visits.
@@ -138,6 +144,7 @@ server route handlers.
 - Menu item categories are intentionally omitted for now.
 - Accidental entries should be removable from the restaurant detail page.
 - Saved visit reviews should be editable without leaving the restaurant detail page.
+- The restaurant detail page treats `방문 기록 추가` as the primary action.
 - Visit logs include meal type: `breakfast`, `lunch`, `dinner`, or `other`.
 - Ratings support half-star values from `0.5` to `5`.
 - The visible app does not use menu coverage anymore; restaurant cards prioritize

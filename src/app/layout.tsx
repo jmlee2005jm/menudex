@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AppSessionProvider } from "@/components/app-session-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,7 +15,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        <AppSessionProvider>{children}</AppSessionProvider>
+      </body>
     </html>
   );
 }

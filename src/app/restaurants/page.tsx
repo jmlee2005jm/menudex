@@ -11,17 +11,20 @@ import {
 import { SelectInput } from "@/components/form-fields";
 import { formatMultiValue } from "@/components/multi-select-field";
 import { PageShell, PrimaryLink } from "@/components/page-shell";
-import type { MenuItemRow, RestaurantRow, VisitRow } from "@/lib/supabase/types";
+import type { RestaurantRow } from "@/lib/supabase/types";
 import { useAppSession } from "@/lib/use-app-session";
 
-const defaultProfileIcon = "/defaulticon.png";
+type RestaurantListVisit = {
+  restaurant_id: string;
+  visited_at: string;
+};
 
 export default function RestaurantsPage() {
   const router = useRouter();
-  const { authenticated, loading, configured, profile } = useAppSession();
+  const { authenticated, loading, configured } = useAppSession();
   const [restaurants, setRestaurants] = useState<RestaurantRow[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
-  const [visits, setVisits] = useState<VisitRow[]>([]);
+  const [visits, setVisits] = useState<RestaurantListVisit[]>([]);
+  const [knownMenuCounts, setKnownMenuCounts] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "lastVisit" | "visitCount">("lastVisit");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
@@ -42,8 +45,8 @@ export default function RestaurantsPage() {
       const response = await fetch("/api/restaurants", { cache: "no-store" });
       const data = (await response.json()) as {
         restaurants?: RestaurantRow[];
-        menuItems?: MenuItemRow[];
-        visits?: VisitRow[];
+        knownMenuCounts?: Record<string, number>;
+        visits?: RestaurantListVisit[];
         error?: string;
       };
 
@@ -58,7 +61,7 @@ export default function RestaurantsPage() {
       }
 
       setRestaurants(data.restaurants ?? []);
-      setMenuItems(data.menuItems ?? []);
+      setKnownMenuCounts(data.knownMenuCounts ?? {});
       setVisits(data.visits ?? []);
       setDataLoading(false);
     }
@@ -140,28 +143,13 @@ export default function RestaurantsPage() {
       title="식당 목록"
       action={
         authenticated ? (
-          <div className="flex items-center justify-end gap-2">
-            {profile ? (
-              <div className="flex min-w-0 items-center gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={profile.iconUrl ?? defaultProfileIcon}
-                  alt=""
-                  className="h-9 w-9 shrink-0 border border-line bg-white object-contain"
-                />
-                <span className="hidden max-w-28 truncate text-sm font-medium text-ink sm:inline">
-                  {profile.displayName}
-                </span>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={handleProfileChange}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center border border-line bg-white px-3 text-sm font-medium text-ink sm:px-4"
-            >
-              프로필 변경
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleProfileChange}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center border border-line bg-white px-3 text-sm font-medium text-ink sm:px-4"
+          >
+            프로필 변경
+          </button>
         ) : null
       }
       titleAction={authenticated ? <PrimaryLink href="/restaurants/new">식당 추가</PrimaryLink> : null}
@@ -209,9 +197,7 @@ export default function RestaurantsPage() {
           <div className="mt-6 grid gap-3">
             {visibleRestaurants.map((restaurant) => {
               const triedCount = visitCount(restaurant.id);
-              const knownItems = menuItems.filter(
-                (item) => item.restaurant_id === restaurant.id && item.is_active,
-              ).length;
+              const knownItems = knownMenuCounts[restaurant.id] ?? 0;
               const lastVisit = lastVisitTime(restaurant.id);
 
               return (

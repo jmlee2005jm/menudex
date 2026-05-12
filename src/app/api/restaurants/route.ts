@@ -12,25 +12,24 @@ export async function GET() {
   const supabase = createAdminClient();
   const ownerId = auth.session.ownerId;
 
-  const [restaurantsResult, menuItemsResult, visitsResult] = await Promise.all([
+  const [restaurantsResult, visitsResult, allVisitsResult] = await Promise.all([
     supabase
       .from("restaurants")
       .select("*")
       .eq("user_id", ownerId)
       .order("updated_at", { ascending: false }),
     supabase
-      .from("menu_items")
-      .select("*, restaurants!inner(user_id)")
-      .eq("restaurants.user_id", ownerId),
-    supabase
       .from("visits")
-      .select("*, profiles(*)")
+      .select("restaurant_id, visited_at")
       .eq("user_id", ownerId)
       .eq("profile_id", auth.session.profileId),
+    supabase
+      .from("visits")
+      .select("restaurant_id, visit_menu_items(id)")
+      .eq("user_id", ownerId),
   ]);
 
-  const error =
-    restaurantsResult.error ?? menuItemsResult.error ?? visitsResult.error;
+  const error = restaurantsResult.error ?? visitsResult.error ?? allVisitsResult.error;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -44,7 +43,7 @@ export async function GET() {
 
   return NextResponse.json({
     restaurants,
-    menuItems: (menuItemsResult.data ?? []).map(stripRestaurantJoin),
+    knownMenuCounts: countKnownMenusByRestaurant(allVisitsResult.data ?? []),
     visits: visitsResult.data ?? [],
   });
 }
@@ -98,13 +97,6 @@ export async function POST(request: Request) {
   return NextResponse.json({ id: data.id }, { status: 201 });
 }
 
-function stripRestaurantJoin<T extends { restaurants?: unknown }>(row: T) {
-  const { restaurants, ...rest } = row;
-  void restaurants;
-
-  return rest;
-}
-
 async function uploadRestaurantIcon(
   supabase: ReturnType<typeof createAdminClient>,
   ownerId: string,
@@ -126,6 +118,17 @@ async function uploadRestaurantIcon(
   }
 
   return path;
+}
+
+function countKnownMenusByRestaurant(
+  visits: Array<{ restaurant_id: string; visit_menu_items?: Array<{ id: string }> }>,
+) {
+  return visits.reduce<Record<string, number>>((counts, visit) => {
+    counts[visit.restaurant_id] =
+      (counts[visit.restaurant_id] ?? 0) + (visit.visit_menu_items?.length ?? 0);
+
+    return counts;
+  }, {});
 }
 
 async function createSignedIconUrl(

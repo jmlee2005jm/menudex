@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ExternalLink } from "lucide-react";
@@ -339,14 +340,17 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
-            <PrimaryLink href={`/restaurants/${restaurantId}/edit`}>
-              식당 수정
-            </PrimaryLink>
+            <Link
+              href={`/restaurants/${restaurantId}/visits/new`}
+              className="inline-flex min-h-12 items-center justify-center bg-leaf px-5 text-sm font-semibold text-white sm:order-none"
+            >
+              방문 기록 추가
+            </Link>
             <PrimaryLink href={`/restaurants/${restaurantId}/menus/new`}>
               메뉴 추가
             </PrimaryLink>
-            <PrimaryLink href={`/restaurants/${restaurantId}/visits/new`}>
-              방문 기록
+            <PrimaryLink href={`/restaurants/${restaurantId}/edit`}>
+              식당 수정
             </PrimaryLink>
             <button
               type="button"

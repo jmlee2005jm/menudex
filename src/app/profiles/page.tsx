@@ -134,7 +134,7 @@ export default function ProfilesPage() {
   }
 
   return (
-    <PageShell eyebrow="MenuDex" title="프로필 선택">
+    <PageShell eyebrow="MenuDex" title="프로필 선택" showProfile={false}>
       {!configured ? <SetupRequired /> : null}
       {configured && loading ? (
         <p className="mt-6 text-sm text-ink/60">불러오는 중...</p>
