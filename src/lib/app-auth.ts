@@ -7,6 +7,7 @@ const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 
 export type AppSession = {
   ownerId: string;
+  profileId: string;
 };
 
 export type AppConfigStatus = {
@@ -17,7 +18,6 @@ export type AppConfigStatus = {
 const requiredEnvVars = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
-  "MENUDEX_APP_PASSWORD",
   "MENUDEX_OWNER_ID",
   "MENUDEX_SESSION_SECRET",
 ] as const;
@@ -35,19 +35,9 @@ export function getOwnerId() {
   return process.env.MENUDEX_OWNER_ID ?? "";
 }
 
-export function verifyAppPassword(password: string) {
-  const expected = process.env.MENUDEX_APP_PASSWORD;
-
-  if (!expected) {
-    return false;
-  }
-
-  return safeEqual(password, expected);
-}
-
-export function createSessionToken(ownerId: string) {
+export function createSessionToken(profileId: string) {
   const expiresAt = Math.floor(Date.now() / 1000) + sessionMaxAgeSeconds;
-  const payload = `${ownerId}.${expiresAt}`;
+  const payload = `${profileId}.${expiresAt}`;
   const signature = sign(payload);
 
   return `${payload}.${signature}`;
@@ -60,10 +50,10 @@ export async function getAppSession(): Promise<AppSession | null> {
     return null;
   }
 
-  const [ownerId, expiresAtRaw, signature] = token.split(".");
+  const [profileId, expiresAtRaw, signature] = token.split(".");
   const expiresAt = Number(expiresAtRaw);
 
-  if (!ownerId || !expiresAt || !signature) {
+  if (!profileId || !expiresAt || !signature) {
     return null;
   }
 
@@ -71,15 +61,11 @@ export async function getAppSession(): Promise<AppSession | null> {
     return null;
   }
 
-  if (!safeEqual(signature, sign(`${ownerId}.${expiresAt}`))) {
+  if (!safeEqual(signature, sign(`${profileId}.${expiresAt}`))) {
     return null;
   }
 
-  if (ownerId !== getOwnerId()) {
-    return null;
-  }
-
-  return { ownerId };
+  return { ownerId: getOwnerId(), profileId };
 }
 
 export function getSessionMaxAgeSeconds() {

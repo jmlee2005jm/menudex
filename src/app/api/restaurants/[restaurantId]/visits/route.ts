@@ -56,6 +56,7 @@ export async function POST(
     .insert({
       restaurant_id: restaurantId,
       user_id: auth.session.ownerId,
+      profile_id: auth.session.profileId,
       visited_at: body?.visitedAt?.trim() || todayDateValue(),
       meal_type: body?.mealType ?? "other",
     })
@@ -121,7 +122,8 @@ export async function DELETE(
     .delete()
     .eq("id", body.visitId)
     .eq("restaurant_id", restaurantId)
-    .eq("user_id", auth.session.ownerId);
+    .eq("user_id", auth.session.ownerId)
+    .eq("profile_id", auth.session.profileId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -191,6 +193,7 @@ export async function PATCH(
     .eq("id", body.visitId)
     .eq("restaurant_id", restaurantId)
     .eq("user_id", auth.session.ownerId)
+    .eq("profile_id", auth.session.profileId)
     .maybeSingle();
 
   if (visitError) {

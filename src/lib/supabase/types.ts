@@ -1,3 +1,12 @@
+export type ProfileRow = {
+  id: string;
+  display_name: string;
+  icon_storage_path: string | null;
+  iconUrl?: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type RestaurantRow = {
   id: string;
   user_id: string;
@@ -17,6 +26,8 @@ export type RestaurantRow = {
 export type MenuPhotoRow = {
   id: string;
   restaurant_id: string;
+  owner_profile_id: string;
+  owner_profile?: ProfileRow | null;
   storage_path: string;
   taken_at: string | null;
   created_at: string;
@@ -35,6 +46,7 @@ export type MenuAnnotationCoordinates = {
 export type MenuAnnotationRow = {
   id: string;
   menu_photo_id: string;
+  profile_id: string;
   visit_id: string | null;
   tried_menu_id: string | null;
   type: "highlight";
@@ -60,6 +72,8 @@ export type VisitRow = {
   id: string;
   restaurant_id: string;
   user_id: string;
+  profile_id: string;
+  profiles?: ProfileRow | null;
   visited_at: string;
   meal_type: "breakfast" | "lunch" | "dinner" | "other";
   created_at: string;

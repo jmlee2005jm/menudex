@@ -22,7 +22,11 @@ export async function GET() {
       .from("menu_items")
       .select("*, restaurants!inner(user_id)")
       .eq("restaurants.user_id", ownerId),
-    supabase.from("visits").select("*").eq("user_id", ownerId),
+    supabase
+      .from("visits")
+      .select("*, profiles(*)")
+      .eq("user_id", ownerId)
+      .eq("profile_id", auth.session.profileId),
   ]);
 
   const error =
@@ -65,7 +69,7 @@ export async function POST(request: Request) {
   const supabase = createAdminClient();
   const iconStoragePath = await uploadRestaurantIcon(
     supabase,
-    auth.session.ownerId,
+    auth.session.profileId,
     form.get("icon"),
   );
   const { data, error } = await supabase

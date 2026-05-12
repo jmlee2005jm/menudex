@@ -6,6 +6,7 @@ export type AppSessionState = {
   authenticated: boolean;
   configured: boolean;
   loading: boolean;
+  profile: { id: string; displayName: string; iconUrl?: string } | null;
 };
 
 export function useAppSession(): AppSessionState {
@@ -13,6 +14,7 @@ export function useAppSession(): AppSessionState {
     authenticated: false,
     configured: true,
     loading: true,
+    profile: null,
   });
 
   useEffect(() => {
@@ -23,6 +25,7 @@ export function useAppSession(): AppSessionState {
       const data = (await response.json()) as {
         configured?: boolean;
         authenticated?: boolean;
+        profile?: { id: string; displayName: string; iconUrl?: string } | null;
       };
 
       if (!mounted) {
@@ -32,13 +35,14 @@ export function useAppSession(): AppSessionState {
       setState({
         configured: Boolean(data.configured),
         authenticated: Boolean(data.authenticated),
+        profile: data.profile ?? null,
         loading: false,
       });
     }
 
     loadSession().catch(() => {
       if (mounted) {
-        setState({ authenticated: false, configured: false, loading: false });
+        setState({ authenticated: false, configured: false, loading: false, profile: null });
       }
     });
 

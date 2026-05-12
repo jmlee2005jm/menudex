@@ -19,7 +19,7 @@ export async function requireAppSession() {
   if (!session) {
     return {
       response: NextResponse.json(
-        { error: "로그인이 필요합니다." },
+        { error: "프로필 선택이 필요합니다." },
         { status: 401 },
       ),
     };

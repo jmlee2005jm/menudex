@@ -48,6 +48,7 @@ export async function POST(
 
   const { error } = await supabase.from("menu_photos").insert({
     restaurant_id: restaurantId,
+    owner_profile_id: auth.session.profileId,
     storage_path: storagePath,
     taken_at: String(form.get("takenAt") ?? "").trim() || todayDateValue(),
   });
@@ -94,7 +95,7 @@ export async function DELETE(
 
   const { data: photo, error: photoError } = await supabase
     .from("menu_photos")
-    .select("storage_path")
+    .select("storage_path, owner_profile_id")
     .eq("id", body.menuPhotoId)
     .eq("restaurant_id", restaurantId)
     .maybeSingle();
@@ -107,6 +108,13 @@ export async function DELETE(
     return NextResponse.json(
       { error: "메뉴 사진을 찾을 수 없습니다." },
       { status: 404 },
+    );
+  }
+
+  if (photo.owner_profile_id !== auth.session.profileId) {
+    return NextResponse.json(
+      { error: "사진을 올린 프로필만 삭제할 수 있습니다." },
+      { status: 403 },
     );
   }
 

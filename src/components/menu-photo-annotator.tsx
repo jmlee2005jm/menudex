@@ -13,10 +13,12 @@ export function MenuPhotoAnnotator({
   restaurantId,
   photo,
   onDeletePhoto,
+  currentProfileId,
 }: {
   restaurantId: string;
   photo: MenuPhotoRow;
   onDeletePhoto: (photoId: string) => void;
+  currentProfileId?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [annotations, setAnnotations] = useState<MenuAnnotationRow[]>(
@@ -153,9 +155,10 @@ export function MenuPhotoAnnotator({
       {photo.signedUrl ? (
         <div
           ref={containerRef}
-          className={`relative w-full touch-none bg-white ${
+          className={`relative w-full bg-white ${
             adding ? "cursor-crosshair select-none" : ""
           }`}
+          style={{ touchAction: adding ? "none" : "pan-y" }}
           onPointerDown={beginHighlight}
           onPointerMove={updateHighlight}
           onPointerUp={finishHighlight}
@@ -219,13 +222,15 @@ export function MenuPhotoAnnotator({
         >
           {adding ? "하이라이트 취소" : "하이라이트 추가"}
         </button>
-        <button
-          type="button"
-          onClick={() => onDeletePhoto(photo.id)}
-          className="min-h-10 border border-red-200 bg-white px-3 text-sm font-medium text-red-700"
-        >
-          사진 삭제
-        </button>
+        {photo.owner_profile_id === currentProfileId ? (
+          <button
+            type="button"
+            onClick={() => onDeletePhoto(photo.id)}
+            className="min-h-10 border border-red-200 bg-white px-3 text-sm font-medium text-red-700"
+          >
+            사진 삭제
+          </button>
+        ) : null}
       </div>
 
       {adding ? (
@@ -243,10 +248,12 @@ export function MenuPhotoCard({
   restaurantId,
   photo,
   onDeletePhoto,
+  currentProfileId,
 }: {
   restaurantId: string;
   photo: MenuPhotoRow;
   onDeletePhoto: (photoId: string) => void;
+  currentProfileId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const highlightCount = photo.menu_annotations?.length ?? 0;
@@ -265,6 +272,7 @@ export function MenuPhotoCard({
           restaurantId={restaurantId}
           photo={photo}
           onDeletePhoto={onDeletePhoto}
+          currentProfileId={currentProfileId}
         />
       </div>
     );
@@ -303,13 +311,15 @@ export function MenuPhotoCard({
           >
             크게 보기
           </button>
-          <button
-            type="button"
-            onClick={() => onDeletePhoto(photo.id)}
-            className="min-h-10 border border-red-200 bg-white px-3 text-sm font-medium text-red-700"
-          >
-            삭제
-          </button>
+          {photo.owner_profile_id === currentProfileId ? (
+            <button
+              type="button"
+              onClick={() => onDeletePhoto(photo.id)}
+              className="min-h-10 border border-red-200 bg-white px-3 text-sm font-medium text-red-700"
+            >
+              삭제
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

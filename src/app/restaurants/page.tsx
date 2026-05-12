@@ -14,9 +14,11 @@ import { PageShell, PrimaryLink } from "@/components/page-shell";
 import type { MenuItemRow, RestaurantRow, VisitRow } from "@/lib/supabase/types";
 import { useAppSession } from "@/lib/use-app-session";
 
+const defaultProfileIcon = "/defaulticon.png";
+
 export default function RestaurantsPage() {
   const router = useRouter();
-  const { authenticated, loading, configured } = useAppSession();
+  const { authenticated, loading, configured, profile } = useAppSession();
   const [restaurants, setRestaurants] = useState<RestaurantRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
   const [visits, setVisits] = useState<VisitRow[]>([]);
@@ -126,10 +128,10 @@ export default function RestaurantsPage() {
     return times.length ? Math.max(...times) : 0;
   }
 
-  async function handleLogout() {
+  async function handleProfileChange() {
     await fetch("/api/session", { method: "DELETE" });
     router.refresh();
-    window.location.href = "/login";
+    window.location.href = "/profiles";
   }
 
   return (
@@ -138,18 +140,31 @@ export default function RestaurantsPage() {
       title="식당 목록"
       action={
         authenticated ? (
-          <div className="flex gap-2">
+          <div className="flex items-center justify-end gap-2">
+            {profile ? (
+              <div className="flex min-w-0 items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={profile.iconUrl ?? defaultProfileIcon}
+                  alt=""
+                  className="h-9 w-9 shrink-0 border border-line bg-white object-contain"
+                />
+                <span className="hidden max-w-28 truncate text-sm font-medium text-ink sm:inline">
+                  {profile.displayName}
+                </span>
+              </div>
+            ) : null}
             <button
               type="button"
-              onClick={handleLogout}
-              className="inline-flex min-h-11 items-center justify-center border border-line bg-white px-4 text-sm font-medium text-ink"
+              onClick={handleProfileChange}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center border border-line bg-white px-3 text-sm font-medium text-ink sm:px-4"
             >
-              로그아웃
+              프로필 변경
             </button>
-            <PrimaryLink href="/restaurants/new">식당 추가</PrimaryLink>
           </div>
         ) : null
       }
+      titleAction={authenticated ? <PrimaryLink href="/restaurants/new">식당 추가</PrimaryLink> : null}
     >
       {!configured ? <SetupRequired /> : null}
       {configured && loading ? <LoadingState /> : null}
@@ -163,27 +178,29 @@ export default function RestaurantsPage() {
               placeholder="식당 검색"
               className="min-h-12 w-full border border-line bg-white px-3 text-base outline-none focus:border-leaf"
             />
-            <SelectInput
-              value={sortBy}
-              onChange={(event) =>
-                setSortBy(event.target.value as "name" | "lastVisit" | "visitCount")
-              }
-            >
-              <option value="lastVisit">최근 방문</option>
-              <option value="visitCount">최다 방문</option>
-              <option value="name">이름</option>
-            </SelectInput>
-            <button
-              type="button"
-              aria-label={sortDirection === "desc" ? "내림차순" : "오름차순"}
-              title={sortDirection === "desc" ? "내림차순" : "오름차순"}
-              onClick={() =>
-                setSortDirection((current) => (current === "desc" ? "asc" : "desc"))
-              }
-              className="inline-flex min-h-11 items-center justify-center border border-line bg-white text-xl font-medium text-ink"
-            >
-              {sortDirection === "desc" ? "↓" : "↑"}
-            </button>
+            <div className="grid grid-cols-[1fr_44px] gap-3 sm:contents">
+              <SelectInput
+                value={sortBy}
+                onChange={(event) =>
+                  setSortBy(event.target.value as "name" | "lastVisit" | "visitCount")
+                }
+              >
+                <option value="lastVisit">최근 방문</option>
+                <option value="visitCount">최다 방문</option>
+                <option value="name">이름</option>
+              </SelectInput>
+              <button
+                type="button"
+                aria-label={sortDirection === "desc" ? "내림차순" : "오름차순"}
+                title={sortDirection === "desc" ? "내림차순" : "오름차순"}
+                onClick={() =>
+                  setSortDirection((current) => (current === "desc" ? "asc" : "desc"))
+                }
+                className="inline-flex min-h-11 items-center justify-center border border-line bg-white text-xl font-medium text-ink"
+              >
+                {sortDirection === "desc" ? "↓" : "↑"}
+              </button>
+            </div>
           </div>
 
           {dataLoading ? <LoadingState /> : null}

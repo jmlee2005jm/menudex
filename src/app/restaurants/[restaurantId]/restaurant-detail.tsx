@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ExternalLink } from "lucide-react";
 import {
   LoadingState,
   LoginRequired,
@@ -29,7 +30,7 @@ const mealLabels = {
 
 export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
   const router = useRouter();
-  const { authenticated, loading, configured } = useAppSession();
+  const { authenticated, loading, configured, profile } = useAppSession();
   const [restaurant, setRestaurant] = useState<RestaurantRow | null>(null);
   const [menuPhotos, setMenuPhotos] = useState<MenuPhotoRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
@@ -39,6 +40,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
   const [editingReviewId, setEditingReviewId] = useState("");
   const [editingRating, setEditingRating] = useState("");
   const [editError, setEditError] = useState("");
+  const [visitScope, setVisitScope] = useState<"mine" | "all">("mine");
 
   useEffect(() => {
     if (!authenticated) {
@@ -51,9 +53,12 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
     async function loadData() {
       setDataLoading(true);
 
-      const response = await fetch(`/api/restaurants/${restaurantId}`, {
+      const response = await fetch(
+        `/api/restaurants/${restaurantId}${visitScope === "all" ? "?visits=all" : ""}`,
+        {
         cache: "no-store",
-      });
+        },
+      );
       const data = (await response.json()) as {
         restaurant: RestaurantRow | null;
         menuPhotos: MenuPhotoRow[];
@@ -81,7 +86,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
     return () => {
       mounted = false;
     };
-  }, [authenticated, restaurantId]);
+  }, [authenticated, restaurantId, visitScope]);
 
   const visitCards = useMemo(
     () =>
@@ -95,6 +100,8 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
           menuName: item.manual_menu_name ?? "이름 없는 메뉴",
           rating: item.rating,
           review: item.review,
+          profileId: visit.profile_id,
+          profileName: visit.profiles?.display_name ?? "프로필",
         })),
       ),
     [visits],
@@ -316,11 +323,17 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                     .join(" · ")}
                 </p>
               ) : null}
-            {restaurant.map_url ? (
-              <a className="text-leaf underline" href={restaurant.map_url}>
-                지도 링크 열기
-              </a>
-            ) : null}
+              {restaurant.map_url ? (
+                <a
+                  className="inline-flex items-center gap-1 text-leaf underline"
+                  href={restaurant.map_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  지도 링크 열기
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                </a>
+              ) : null}
             {restaurant.notes ? <p>{restaurant.notes}</p> : null}
             </div>
           </div>
@@ -346,6 +359,26 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
 
           <section className="mt-8">
             <h2 className="text-xl font-semibold">방문 기록</h2>
+            <div className="mt-3 inline-flex border border-line bg-white">
+              <button
+                type="button"
+                onClick={() => setVisitScope("mine")}
+                className={`min-h-10 px-4 text-sm font-medium ${
+                  visitScope === "mine" ? "bg-ink text-white" : "text-ink"
+                }`}
+              >
+                내 기록
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisitScope("all")}
+                className={`min-h-10 px-4 text-sm font-medium ${
+                  visitScope === "all" ? "bg-ink text-white" : "text-ink"
+                }`}
+              >
+                전체 기록
+              </button>
+            </div>
             <div className="mt-3 grid gap-2">
               {visitCards.map((visit) => (
                 <div
@@ -395,10 +428,16 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                           <p className="break-words font-medium">{visit.menuName}</p>
                           <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm text-ink/60">
                             <span className="hidden sm:inline">·</span>
-                            <span>{visit.visitedAt}</span>
-                            <span>·</span>
-                            <span>{mealLabels[visit.mealType]}</span>
-                            <span>·</span>
+                          <span>{visit.visitedAt}</span>
+                          <span>·</span>
+                          <span>{mealLabels[visit.mealType]}</span>
+                          {visitScope === "all" ? (
+                            <>
+                              <span>·</span>
+                              <span>{visit.profileName}</span>
+                            </>
+                          ) : null}
+                          <span>·</span>
                             <RatingDisplay value={visit.rating} />
                           </div>
                         </div>
@@ -408,7 +447,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                       </>
                     )}
                   </div>
-                  {editingReviewId === visit.id ? null : (
+                  {editingReviewId === visit.id || visit.profileId !== profile?.id ? null : (
                     <div className="flex shrink-0 justify-end gap-2 sm:flex-row">
                       <button
                         type="button"
@@ -445,6 +484,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                   restaurantId={restaurantId}
                   photo={photo}
                   onDeletePhoto={deleteMenuPhoto}
+                  currentProfileId={profile?.id}
                 />
               ))}
               {menuPhotos.length === 0 ? (

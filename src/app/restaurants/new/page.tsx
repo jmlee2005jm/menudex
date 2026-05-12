@@ -87,6 +87,7 @@ export default function NewRestaurantPage() {
               accept="image/*"
               compact
               preview
+              cropSquare
             />
           </Field>
           <Field label="네이버/카카오 지도 링크">

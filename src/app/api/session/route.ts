@@ -5,20 +5,50 @@ import {
   createSessionToken,
   getAppConfigStatus,
   getAppSession,
-  getOwnerId,
   getSessionMaxAgeSeconds,
-  verifyAppPassword,
 } from "@/lib/app-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
   const status = getAppConfigStatus();
   const session = await getAppSession();
+  let profile = null;
+
+  if (session) {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, display_name, icon_storage_path")
+      .eq("id", session.profileId)
+      .maybeSingle();
+    profile = data
+      ? {
+          id: data.id,
+          displayName: data.display_name,
+          iconUrl: await createSignedIconUrl(supabase, data.icon_storage_path),
+        }
+      : null;
+  }
 
   return NextResponse.json({
     configured: status.configured,
     missing: status.missing,
-    authenticated: Boolean(session),
+    authenticated: Boolean(profile),
+    profile,
   });
+}
+
+async function createSignedIconUrl(
+  supabase: ReturnType<typeof createAdminClient>,
+  path: string | null,
+) {
+  if (!path) {
+    return undefined;
+  }
+
+  const { data } = await supabase.storage.from("menu-photos").createSignedUrl(path, 60 * 60);
+
+  return data?.signedUrl;
 }
 
 export async function POST(request: Request) {
@@ -31,18 +61,32 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json().catch(() => null)) as { password?: string } | null;
-  const password = body?.password ?? "";
+  const body = (await request.json().catch(() => null)) as { profileId?: string } | null;
+  const profileId = body?.profileId ?? "";
 
-  if (!verifyAppPassword(password)) {
+  if (!profileId) {
     return NextResponse.json(
-      { error: "비밀번호가 맞지 않습니다." },
-      { status: 401 },
+      { error: "프로필을 선택하세요." },
+      { status: 400 },
+    );
+  }
+
+  const supabase = createAdminClient();
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", profileId)
+    .maybeSingle();
+
+  if (error || !profile) {
+    return NextResponse.json(
+      { error: "프로필을 찾을 수 없습니다." },
+      { status: 404 },
     );
   }
 
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(appSessionCookieName, createSessionToken(getOwnerId()), {
+  response.cookies.set(appSessionCookieName, createSessionToken(profile.id), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

@@ -6,16 +6,15 @@ The core workflow is simple: save a restaurant, add menu photos, log what was tr
 
 ## Current Status
 
-The app now uses Supabase as the source of truth, but no longer uses Supabase
-Auth for local app login. MenuDex is currently a single-user app protected by
-one app password, with every row still scoped by an owner UUID so the data model
-can move to multi-user auth later.
+The app uses Supabase as the source of truth, but no longer uses Supabase Auth
+for local app login. MenuDex now starts with Switch-style profile selection for
+a small trusted friend group.
 
 Implemented:
 
 - Korean-first UI.
-- `/` redirects to `/restaurants`.
-- App-password login with a signed HttpOnly session cookie.
+- `/` redirects to `/profiles`.
+- Switch-style profile selection with a signed HttpOnly session cookie.
 - Supabase-backed restaurant list and restaurant creation.
 - Supabase-backed manual menu item creation.
 - Supabase Storage upload for menu photos.
@@ -30,6 +29,11 @@ Implemented:
   types, and manual icon upload.
 - Menu photo and restaurant icon inputs support file selection and clipboard
   image paste.
+- Restaurant edit shows the current icon preview when one exists.
+- External map links open in a new tab.
+- Restaurants are shared across profiles.
+- Visits/reviews and highlights are profile-scoped.
+- Menu photos are owned by the profile that uploaded them; only that profile can delete them.
 - Restaurant list can sort by name, latest visit, or visit count, with a compact
   arrow button for direction.
 - Server-side Supabase service-role API routes with owner checks.
@@ -37,8 +41,6 @@ Implemented:
 
 Not implemented yet:
 
-- Editing/deleting records.
-- Menu photo highlight annotation UI.
 - Linking annotations to visits/menu items.
 - Full auth route protection middleware.
 - OCR or map embedding.
@@ -51,7 +53,7 @@ Not implemented yet:
 - Tailwind CSS
 - Vercel free tier for hosting
 - Supabase Free for Postgres and Storage
-- Single-user app password for now, multi-user-ready owner fields in the DB
+- Shared restaurant data with profile-scoped visits/highlights
 - Zod later for validation at the data boundary
 
 ## Supabase Setup
@@ -65,7 +67,6 @@ cp .env.example .env.local
 ```text
 NEXT_PUBLIC_SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
-MENUDEX_APP_PASSWORD=
 MENUDEX_OWNER_ID=
 MENUDEX_SESSION_SECRET=
 ```
@@ -83,6 +84,8 @@ Apply the schemas in order:
 ```text
 supabase/migrations/0001_initial_schema.sql
 supabase/migrations/0002_single_user_owner.sql
+supabase/migrations/0003_restaurant_categories_icons.sql
+supabase/migrations/0004_profiles.sql
 ```
 
 The first migration creates:
@@ -97,6 +100,9 @@ The second migration removes direct `auth.users` foreign keys from owner columns
 That lets the app use a synthetic `MENUDEX_OWNER_ID` without creating a Supabase
 Auth user. RLS policies remain in place for the future, but the current Next.js
 API routes use the service-role key and enforce owner checks in server code.
+
+The fourth migration creates profiles, seeds the first profile as `JM`, and assigns
+existing visits/photos/highlights to that profile.
 
 Menu photos are uploaded to paths like:
 
@@ -124,6 +130,10 @@ server route handlers.
 - Restaurant name and branch/place are displayed as separate text treatments.
 - Restaurant categories are split into broad cuisine and food/service type.
 - Restaurant icons are manually uploaded by the user; no logo scraping is used.
+- The first screen is profile selection. Add friends through `프로필 추가`.
+- Profiles can be edited or deleted from the profile selection screen.
+- Profile and restaurant icons open a square crop editor before upload.
+- Restaurant detail defaults to `내 기록`; `전체 기록` includes friends' visits.
 - Menu photo labels are intentionally omitted for now.
 - Menu item categories are intentionally omitted for now.
 - Accidental entries should be removable from the restaurant detail page.
@@ -159,11 +169,11 @@ Core tables:
 
 Ownership:
 
-- `restaurants.user_id` and `visits.user_id` directly scope user-owned records.
-- Related tables are protected through joins to the owning restaurant or visit.
-- In the current single-user mode, `user_id` is `MENUDEX_OWNER_ID`.
-- In a later multi-user version, the app can replace `MENUDEX_OWNER_ID` with the
-  authenticated user's id or an `app_users` mapping without changing most tables.
+- `restaurants.user_id` keeps shared restaurant records under `MENUDEX_OWNER_ID`.
+- `visits.profile_id` scopes visits and reviews to the selected profile.
+- `menu_annotations.profile_id` scopes highlights to the selected profile.
+- `menu_photos.owner_profile_id` records which profile uploaded a menu photo.
+- Deleting a profile removes that profile's visits, highlights, icon, and uploaded menu photos.
 
 ## App Structure
 
@@ -171,6 +181,7 @@ Ownership:
 src/
   app/
     page.tsx
+    profiles/page.tsx
     login/page.tsx
     api/
       session/route.ts

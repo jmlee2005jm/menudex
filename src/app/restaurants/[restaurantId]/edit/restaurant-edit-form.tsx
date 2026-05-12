@@ -132,6 +132,8 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
               accept="image/*"
               compact
               preview
+              cropSquare
+              currentPreviewUrl={restaurant.iconUrl}
             />
           </Field>
           <Field label="네이버/카카오 지도 링크">

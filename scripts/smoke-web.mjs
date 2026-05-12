@@ -31,11 +31,12 @@ async function expectPageContainsAny(path, expectedTexts) {
 }
 
 await expectStatus("/", 307);
+await expectPageContains("/profiles", "프로필 선택");
 await expectPageContains("/restaurants", "식당 목록");
 await expectPageContainsAny("/restaurants", [
   "식당 추가",
   "MenuDex 설정이 필요합니다",
-  "로그인이 필요합니다",
+  "프로필 선택이 필요합니다",
   "불러오는 중",
 ]);
 await expectPageContains("/restaurants/new", "새 식당");

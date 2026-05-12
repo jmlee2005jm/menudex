@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { assertRestaurantOwner, requireAppSession } from "@/lib/api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { MenuAnnotationRow } from "@/lib/supabase/types";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ restaurantId: string }> },
 ) {
   const auth = await requireAppSession();
@@ -13,8 +14,19 @@ export async function GET(
   }
 
   const { restaurantId } = await context.params;
+  const includeAllVisits = new URL(request.url).searchParams.get("visits") === "all";
   const supabase = createAdminClient();
   const ownerId = auth.session.ownerId;
+  let visitsQuery = supabase
+    .from("visits")
+    .select("*, profiles(*), visit_menu_items(*)")
+    .eq("restaurant_id", restaurantId)
+    .eq("user_id", ownerId)
+    .order("visited_at", { ascending: false });
+
+  if (!includeAllVisits) {
+    visitsQuery = visitsQuery.eq("profile_id", auth.session.profileId);
+  }
 
   const [restaurantResult, photosResult, menuItemsResult, visitsResult] =
     await Promise.all([
@@ -36,12 +48,7 @@ export async function GET(
         .eq("restaurant_id", restaurantId)
         .eq("restaurants.user_id", ownerId)
         .order("created_at", { ascending: false }),
-      supabase
-        .from("visits")
-        .select("*, visit_menu_items(*)")
-        .eq("restaurant_id", restaurantId)
-        .eq("user_id", ownerId)
-        .order("visited_at", { ascending: false }),
+      visitsQuery,
     ]);
 
   const error =
@@ -68,13 +75,19 @@ export async function GET(
       return { ...photo, signedUrl: data?.signedUrl };
     }),
   );
+  const profileFilteredPhotos = photos.map((photo) => ({
+    ...photo,
+    menu_annotations: ((photo as { menu_annotations?: MenuAnnotationRow[] }).menu_annotations ?? []).filter(
+      (annotation: MenuAnnotationRow) => annotation.profile_id === auth.session.profileId,
+    ),
+  }));
 
   return NextResponse.json({
     restaurant: {
       ...restaurantResult.data,
       iconUrl: await createSignedIconUrl(supabase, restaurantResult.data.icon_storage_path),
     },
-    menuPhotos: photos,
+    menuPhotos: profileFilteredPhotos,
     menuItems: (menuItemsResult.data ?? []).map(stripRestaurantJoin),
     visits: visitsResult.data ?? [],
   });

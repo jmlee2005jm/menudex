@@ -54,6 +54,7 @@ export async function POST(
     .from("menu_annotations")
     .insert({
       menu_photo_id: menuPhotoId,
+      profile_id: auth.session.profileId,
       type: "highlight",
       shape: "rect",
       color: "#facc15",
@@ -123,7 +124,8 @@ export async function DELETE(
     .from("menu_annotations")
     .delete()
     .eq("id", body.annotationId)
-    .eq("menu_photo_id", menuPhotoId);
+    .eq("menu_photo_id", menuPhotoId)
+    .eq("profile_id", auth.session.profileId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
