@@ -18,6 +18,9 @@ export type RestaurantRow = {
   cuisine_category: string | null;
   food_type: string | null;
   icon_storage_path: string | null;
+  total_menu_goal: number | null;
+  latitude: number | null;
+  longitude: number | null;
   iconUrl?: string;
   created_at: string;
   updated_at: string;
@@ -91,6 +94,16 @@ export type VisitMenuItemRow = {
   updated_at: string;
 };
 
+export type VisitPhotoRow = {
+  id: string;
+  visit_id: string;
+  profile_id: string;
+  storage_path: string;
+  signedUrl?: string;
+  created_at: string;
+};
+
 export type VisitWithMenu = VisitRow & {
   visit_menu_items: VisitMenuItemRow[];
+  visit_photos?: VisitPhotoRow[];
 };

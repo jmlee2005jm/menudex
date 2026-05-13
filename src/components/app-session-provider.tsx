@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
+import { getCachedJson } from "@/lib/client-cache";
 
 export type AppSessionState = {
   authenticated: boolean;
@@ -32,12 +33,11 @@ export function AppSessionProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     async function loadSession() {
-      const response = await fetch("/api/session", { cache: "no-store" });
-      const data = (await response.json()) as {
+      const data = await getCachedJson<{
         configured?: boolean;
         authenticated?: boolean;
         profile?: { id: string; displayName: string; iconUrl?: string } | null;
-      };
+      }>("/api/session", 30_000);
 
       if (!mounted) {
         return;

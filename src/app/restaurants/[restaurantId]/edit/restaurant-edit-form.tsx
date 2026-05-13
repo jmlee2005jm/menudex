@@ -13,9 +13,11 @@ import {
   TextArea,
   TextInput,
 } from "@/components/form-fields";
+import { KakaoPlacePicker } from "@/components/kakao-place-picker";
 import { MultiSelectField } from "@/components/multi-select-field";
 import { PageShell, SecondaryLink } from "@/components/page-shell";
 import { PasteImageInput } from "@/components/paste-image-input";
+import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
 import { cuisineOptions, foodTypeOptions } from "@/lib/restaurant-options";
 import type { RestaurantRow } from "@/lib/supabase/types";
 import { useAppSession } from "@/lib/use-app-session";
@@ -37,13 +39,10 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
 
     async function loadRestaurant() {
       setDataLoading(true);
-      const response = await fetch(`/api/restaurants/${restaurantId}`, {
-        cache: "no-store",
-      });
-      const data = (await response.json()) as {
+      const data = await getCachedJson<{
         restaurant?: RestaurantRow | null;
         error?: string;
-      };
+      }>(`/api/restaurants/${restaurantId}`, 10_000);
 
       if (mounted) {
         setRestaurant(data.restaurant ?? null);
@@ -86,6 +85,8 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
+    clearCachedJson(`/api/restaurants/${restaurantId}`);
+    clearCachedJson("/api/restaurants");
     router.push(`/restaurants/${restaurantId}`);
   }
 
@@ -123,6 +124,15 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
               placeholder="메뉴/형태 선택"
             />
           </Field>
+          <Field label="목표 메뉴 수">
+            <TextInput
+              name="totalMenuGoal"
+              defaultValue={restaurant.total_menu_goal ?? ""}
+              type="number"
+              min="0"
+              inputMode="numeric"
+            />
+          </Field>
           <Field label="아이콘">
             <p className="mb-1 text-sm text-ink/55">
               선택 사항입니다. 새 파일을 선택할 때만 아이콘이 바뀝니다.
@@ -136,8 +146,12 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
               currentPreviewUrl={restaurant.iconUrl}
             />
           </Field>
-          <Field label="네이버/카카오 지도 링크">
-            <TextInput name="mapUrl" defaultValue={restaurant.map_url ?? ""} type="url" />
+          <Field label="위치">
+            <KakaoPlacePicker
+              defaultLatitude={restaurant.latitude}
+              defaultLongitude={restaurant.longitude}
+              defaultQuery={restaurant.name}
+            />
           </Field>
           <Field label="메모">
             <TextArea name="notes" defaultValue={restaurant.notes ?? ""} />

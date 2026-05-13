@@ -6,6 +6,7 @@ import type {
   MenuAnnotationRow,
   MenuPhotoRow,
 } from "@/lib/supabase/types";
+import { clearCachedJson } from "@/lib/client-cache";
 
 type DraftRect = MenuAnnotationCoordinates | null;
 
@@ -112,6 +113,7 @@ export function MenuPhotoAnnotator({
     }
 
     setAnnotations((current) => [...current, data.annotation!]);
+    clearCachedJson(`/api/restaurants/${restaurantId}`);
     setDraft(null);
     setAdding(false);
   }
@@ -148,6 +150,7 @@ export function MenuPhotoAnnotator({
     setAnnotations((current) =>
       current.filter((annotation) => annotation.id !== annotationId),
     );
+    clearCachedJson(`/api/restaurants/${restaurantId}`);
   }
 
   function getNormalizedPoint(event: PointerEvent<HTMLDivElement>) {

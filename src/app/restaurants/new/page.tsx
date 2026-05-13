@@ -8,9 +8,11 @@ import {
   SetupRequired,
 } from "@/components/app-state";
 import { Field, SubmitButton, TextArea, TextInput } from "@/components/form-fields";
+import { KakaoPlacePicker } from "@/components/kakao-place-picker";
 import { MultiSelectField } from "@/components/multi-select-field";
 import { PageShell, SecondaryLink } from "@/components/page-shell";
 import { PasteImageInput } from "@/components/paste-image-input";
+import { clearCachedJson } from "@/lib/client-cache";
 import { cuisineOptions, foodTypeOptions } from "@/lib/restaurant-options";
 import { useAppSession } from "@/lib/use-app-session";
 
@@ -46,6 +48,7 @@ export default function NewRestaurantPage() {
       return;
     }
 
+    clearCachedJson("/api/restaurants");
     router.push(`/restaurants/${data.id}`);
   }
 
@@ -80,6 +83,14 @@ export default function NewRestaurantPage() {
               placeholder="메뉴/형태 선택"
             />
           </Field>
+          <Field label="목표 메뉴 수">
+            <TextInput
+              name="totalMenuGoal"
+              type="number"
+              min="0"
+              inputMode="numeric"
+            />
+          </Field>
           <Field label="아이콘">
             <p className="mb-1 text-sm text-ink/55">선택 사항입니다. 없으면 이름 첫 글자를 보여줍니다.</p>
             <PasteImageInput
@@ -90,8 +101,8 @@ export default function NewRestaurantPage() {
               cropSquare
             />
           </Field>
-          <Field label="네이버/카카오 지도 링크">
-            <TextInput name="mapUrl" placeholder="지도 링크" type="url" />
+          <Field label="위치">
+            <KakaoPlacePicker />
           </Field>
           <Field label="메모">
             <TextArea name="notes" placeholder="영업시간, 주문 방식, 좌석 등 기억할 내용" />

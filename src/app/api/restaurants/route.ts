@@ -12,24 +12,56 @@ export async function GET() {
   const supabase = createAdminClient();
   const ownerId = auth.session.ownerId;
 
-  const [restaurantsResult, visitsResult, allVisitsResult] = await Promise.all([
-    supabase
-      .from("restaurants")
-      .select("*")
-      .eq("user_id", ownerId)
-      .order("updated_at", { ascending: false }),
-    supabase
-      .from("visits")
-      .select("restaurant_id, visited_at")
-      .eq("user_id", ownerId)
-      .eq("profile_id", auth.session.profileId),
-    supabase
-      .from("visits")
-      .select("restaurant_id, visit_menu_items(id)")
-      .eq("user_id", ownerId),
-  ]);
+  const [
+    restaurantsResult,
+    visitsResult,
+    unlockedMenusResult,
+    recentVisitsResult,
+    allRecentVisitsResult,
+  ] =
+    await Promise.all([
+      supabase
+        .from("restaurants")
+        .select("*")
+        .eq("user_id", ownerId)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("visits")
+        .select("restaurant_id, visited_at")
+        .eq("user_id", ownerId)
+        .eq("profile_id", auth.session.profileId),
+      supabase
+        .from("visits")
+        .select("restaurant_id, visit_menu_items(manual_menu_name, menu_items(name))")
+        .eq("user_id", ownerId)
+        .eq("profile_id", auth.session.profileId),
+      supabase
+        .from("visits")
+        .select(
+          "id, restaurant_id, profile_id, visited_at, created_at, meal_type, profiles(display_name), visit_photos(*), visit_menu_items(manual_menu_name, rating, menu_items(name))",
+        )
+        .eq("user_id", ownerId)
+        .eq("profile_id", auth.session.profileId)
+        .order("visited_at", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(4),
+      supabase
+        .from("visits")
+        .select(
+          "id, restaurant_id, profile_id, visited_at, created_at, meal_type, profiles(display_name), visit_photos(*), visit_menu_items(manual_menu_name, rating, menu_items(name))",
+        )
+        .eq("user_id", ownerId)
+        .order("visited_at", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(4),
+    ]);
 
-  const error = restaurantsResult.error ?? visitsResult.error ?? allVisitsResult.error;
+  const error =
+    restaurantsResult.error ??
+    visitsResult.error ??
+    unlockedMenusResult.error ??
+    recentVisitsResult.error ??
+    allRecentVisitsResult.error;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -43,9 +75,27 @@ export async function GET() {
 
   return NextResponse.json({
     restaurants,
-    knownMenuCounts: countKnownMenusByRestaurant(allVisitsResult.data ?? []),
+    unlockedMenuCounts: countUnlockedMenusByRestaurant(unlockedMenusResult.data ?? []),
+    recentVisits: await addSignedVisitPhotoUrls(supabase, recentVisitsResult.data ?? []),
+    allRecentVisits: await addSignedVisitPhotoUrls(supabase, allRecentVisitsResult.data ?? []),
     visits: visitsResult.data ?? [],
   });
+}
+
+async function addSignedVisitPhotoUrls<
+  T extends { visit_photos?: Array<{ storage_path: string }> | null },
+>(supabase: ReturnType<typeof createAdminClient>, visits: T[]) {
+  return Promise.all(
+    visits.map(async (visit) => ({
+      ...visit,
+      visit_photos: await Promise.all(
+        (visit.visit_photos ?? []).map(async (photo) => ({
+          ...photo,
+          signedUrl: await createSignedIconUrl(supabase, photo.storage_path),
+        })),
+      ),
+    })),
+  );
 }
 
 export async function POST(request: Request) {
@@ -66,6 +116,23 @@ export async function POST(request: Request) {
   }
 
   const supabase = createAdminClient();
+  const latitude = parseCoordinate(form.get("latitude"), -90, 90);
+  const longitude = parseCoordinate(form.get("longitude"), -180, 180);
+
+  if (latitude === "invalid" || longitude === "invalid") {
+    return NextResponse.json(
+      { error: "지도 좌표를 올바른 숫자로 입력하세요." },
+      { status: 400 },
+    );
+  }
+
+  if ((latitude === null) !== (longitude === null)) {
+    return NextResponse.json(
+      { error: "지도 좌표는 위도와 경도를 함께 입력하세요." },
+      { status: 400 },
+    );
+  }
+
   const iconStoragePath = await uploadRestaurantIcon(
     supabase,
     auth.session.profileId,
@@ -81,6 +148,9 @@ export async function POST(request: Request) {
       notes: String(form.get("notes") ?? "").trim() || null,
       cuisine_category: String(form.get("cuisineCategory") ?? "").trim() || null,
       food_type: String(form.get("foodType") ?? "").trim() || null,
+      total_menu_goal: parseMenuGoal(form.get("totalMenuGoal")),
+      latitude,
+      longitude,
       icon_storage_path: iconStoragePath,
       menu_coverage: "unknown",
     })
@@ -89,7 +159,7 @@ export async function POST(request: Request) {
 
   if (error || !data) {
     return NextResponse.json(
-      { error: error?.message ?? "식당을 저장하지 못했습니다." },
+      { error: normalizeRestaurantSchemaError(error?.message ?? "식당을 저장하지 못했습니다.") },
       { status: 500 },
     );
   }
@@ -120,15 +190,88 @@ async function uploadRestaurantIcon(
   return path;
 }
 
-function countKnownMenusByRestaurant(
-  visits: Array<{ restaurant_id: string; visit_menu_items?: Array<{ id: string }> }>,
+function countUnlockedMenusByRestaurant(
+  visits: Array<{
+    restaurant_id: string;
+    visit_menu_items?: Array<{
+      manual_menu_name: string | null;
+      menu_items?: { name: string | null } | Array<{ name: string | null }> | null;
+    }>;
+  }>,
 ) {
-  return visits.reduce<Record<string, number>>((counts, visit) => {
-    counts[visit.restaurant_id] =
-      (counts[visit.restaurant_id] ?? 0) + (visit.visit_menu_items?.length ?? 0);
+  const unlocked = visits.reduce<Record<string, Set<string>>>((counts, visit) => {
+    const current = counts[visit.restaurant_id] ?? new Set<string>();
+
+    for (const item of visit.visit_menu_items ?? []) {
+      const linkedMenuName = Array.isArray(item.menu_items)
+        ? item.menu_items[0]?.name
+        : item.menu_items?.name;
+      const name = normalizeMenuName(item.manual_menu_name ?? linkedMenuName ?? "");
+
+      if (name) {
+        current.add(name);
+      }
+    }
+
+    counts[visit.restaurant_id] = current;
 
     return counts;
   }, {});
+
+  return Object.fromEntries(
+    Object.entries(unlocked).map(([restaurantId, names]) => [restaurantId, names.size]),
+  );
+}
+
+function normalizeMenuName(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function parseMenuGoal(value: FormDataEntryValue | null) {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function parseCoordinate(
+  value: FormDataEntryValue | null,
+  min: number,
+  max: number,
+) {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    return "invalid";
+  }
+
+  return parsed;
+}
+
+function normalizeRestaurantSchemaError(message: string) {
+  if (
+    message.includes("latitude") ||
+    message.includes("longitude") ||
+    message.includes("icon_storage_path") ||
+    message.includes("cuisine_category") ||
+    message.includes("food_type") ||
+    message.includes("total_menu_goal")
+  ) {
+    return "식당 지도/분류/아이콘/목표 메뉴 컬럼이 아직 없습니다. Supabase에서 최신 마이그레이션을 먼저 실행하세요.";
+  }
+
+  return message;
 }
 
 async function createSignedIconUrl(

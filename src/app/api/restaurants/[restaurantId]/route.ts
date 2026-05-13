@@ -19,7 +19,7 @@ export async function GET(
   const ownerId = auth.session.ownerId;
   let visitsQuery = supabase
     .from("visits")
-    .select("*, profiles(*), visit_menu_items(*)")
+    .select("*, profiles(*), visit_menu_items(*), visit_photos(*)")
     .eq("restaurant_id", restaurantId)
     .eq("user_id", ownerId)
     .order("visited_at", { ascending: false });
@@ -89,8 +89,24 @@ export async function GET(
     },
     menuPhotos: profileFilteredPhotos,
     menuItems: (menuItemsResult.data ?? []).map(stripRestaurantJoin),
-    visits: visitsResult.data ?? [],
+    visits: await addSignedVisitPhotoUrls(supabase, visitsResult.data ?? []),
   });
+}
+
+async function addSignedVisitPhotoUrls<
+  T extends { visit_photos?: Array<{ storage_path: string }> | null },
+>(supabase: ReturnType<typeof createAdminClient>, visits: T[]) {
+  return Promise.all(
+    visits.map(async (visit) => ({
+      ...visit,
+      visit_photos: await Promise.all(
+        (visit.visit_photos ?? []).map(async (photo) => ({
+          ...photo,
+          signedUrl: await createSignedIconUrl(supabase, photo.storage_path),
+        })),
+      ),
+    })),
+  );
 }
 
 function stripRestaurantJoin<T extends { restaurants?: unknown }>(row: T) {
@@ -188,10 +204,26 @@ export async function PATCH(
 
   const form = await request.formData();
   const name = String(form.get("name") ?? "").trim();
+  const latitude = parseCoordinate(form.get("latitude"), -90, 90);
+  const longitude = parseCoordinate(form.get("longitude"), -180, 180);
 
   if (!name) {
     return NextResponse.json(
       { error: "식당 이름을 입력하세요." },
+      { status: 400 },
+    );
+  }
+
+  if (latitude === "invalid" || longitude === "invalid") {
+    return NextResponse.json(
+      { error: "지도 좌표를 올바른 숫자로 입력하세요." },
+      { status: 400 },
+    );
+  }
+
+  if ((latitude === null) !== (longitude === null)) {
+    return NextResponse.json(
+      { error: "지도 좌표는 위도와 경도를 함께 입력하세요." },
       { status: 400 },
     );
   }
@@ -229,6 +261,9 @@ export async function PATCH(
       notes: String(form.get("notes") ?? "").trim() || null,
       cuisine_category: String(form.get("cuisineCategory") ?? "").trim() || null,
       food_type: String(form.get("foodType") ?? "").trim() || null,
+      total_menu_goal: parseMenuGoal(form.get("totalMenuGoal")),
+      latitude,
+      longitude,
       ...(iconStoragePath ? { icon_storage_path: iconStoragePath } : {}),
     })
     .eq("id", restaurantId)
@@ -248,12 +283,47 @@ function normalizeRestaurantSchemaError(message: string) {
   if (
     message.includes("icon_storage_path") ||
     message.includes("cuisine_category") ||
-    message.includes("food_type")
+    message.includes("food_type") ||
+    message.includes("total_menu_goal") ||
+    message.includes("latitude") ||
+    message.includes("longitude")
   ) {
-    return "식당 분류/아이콘 컬럼이 아직 없습니다. Supabase에서 0003_restaurant_categories_icons.sql 마이그레이션을 먼저 실행하세요.";
+    return "식당 지도/분류/아이콘/목표 메뉴 컬럼이 아직 없습니다. Supabase에서 최신 마이그레이션을 먼저 실행하세요.";
   }
 
   return message;
+}
+
+function parseMenuGoal(value: FormDataEntryValue | null) {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function parseCoordinate(
+  value: FormDataEntryValue | null,
+  min: number,
+  max: number,
+) {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    return "invalid";
+  }
+
+  return parsed;
 }
 
 async function uploadRestaurantIcon(

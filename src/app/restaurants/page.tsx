@@ -9,8 +9,11 @@ import {
   SetupRequired,
 } from "@/components/app-state";
 import { SelectInput } from "@/components/form-fields";
+import { KakaoMap } from "@/components/kakao-map";
 import { formatMultiValue } from "@/components/multi-select-field";
-import { PageShell, PrimaryLink } from "@/components/page-shell";
+import { PageShell, PrimaryLink, SecondaryLink } from "@/components/page-shell";
+import { RatingDisplay } from "@/components/rating-field";
+import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
 import type { RestaurantRow } from "@/lib/supabase/types";
 import { useAppSession } from "@/lib/use-app-session";
 
@@ -19,12 +22,43 @@ type RestaurantListVisit = {
   visited_at: string;
 };
 
+type RecentVisit = {
+  id: string;
+  restaurant_id: string;
+  profile_id: string;
+  visited_at: string;
+  created_at: string;
+  meal_type: "breakfast" | "lunch" | "dinner" | "other";
+  profiles?: { display_name: string | null } | Array<{ display_name: string | null }> | null;
+  visit_photos?: Array<{ signedUrl?: string }>;
+  visit_menu_items?: Array<{
+    manual_menu_name: string | null;
+    rating: number | null;
+    menu_items?: { name: string | null } | Array<{ name: string | null }> | null;
+  }>;
+};
+
+const mealLabels = {
+  breakfast: "아침",
+  lunch: "점심",
+  dinner: "저녁",
+  other: "기타",
+};
+
+const restaurantNameCollator = new Intl.Collator("ko-KR", {
+  numeric: true,
+  sensitivity: "base",
+});
+
 export default function RestaurantsPage() {
   const router = useRouter();
   const { authenticated, loading, configured } = useAppSession();
   const [restaurants, setRestaurants] = useState<RestaurantRow[]>([]);
   const [visits, setVisits] = useState<RestaurantListVisit[]>([]);
-  const [knownMenuCounts, setKnownMenuCounts] = useState<Record<string, number>>({});
+  const [recentVisits, setRecentVisits] = useState<RecentVisit[]>([]);
+  const [allRecentVisits, setAllRecentVisits] = useState<RecentVisit[]>([]);
+  const [recentScope, setRecentScope] = useState<"mine" | "all">("mine");
+  const [unlockedMenuCounts, setUnlockedMenuCounts] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "lastVisit" | "visitCount">("lastVisit");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
@@ -42,26 +76,29 @@ export default function RestaurantsPage() {
       setDataLoading(true);
       setDataError("");
 
-      const response = await fetch("/api/restaurants", { cache: "no-store" });
-      const data = (await response.json()) as {
+      const data = await getCachedJson<{
         restaurants?: RestaurantRow[];
-        knownMenuCounts?: Record<string, number>;
+        unlockedMenuCounts?: Record<string, number>;
+        recentVisits?: RecentVisit[];
+        allRecentVisits?: RecentVisit[];
         visits?: RestaurantListVisit[];
         error?: string;
-      };
+      }>("/api/restaurants", 15_000);
 
       if (!mounted) {
         return;
       }
 
-      if (!response.ok) {
+      if (data.error) {
         setDataError(data.error ?? "식당 목록을 불러오지 못했습니다.");
         setDataLoading(false);
         return;
       }
 
       setRestaurants(data.restaurants ?? []);
-      setKnownMenuCounts(data.knownMenuCounts ?? {});
+      setUnlockedMenuCounts(data.unlockedMenuCounts ?? {});
+      setRecentVisits(data.recentVisits ?? []);
+      setAllRecentVisits(data.allRecentVisits ?? []);
       setVisits(data.visits ?? []);
       setDataLoading(false);
     }
@@ -99,22 +136,21 @@ export default function RestaurantsPage() {
 
     return [...filtered].sort((left, right) => {
       const direction = sortDirection === "asc" ? 1 : -1;
+      const nameOrder = restaurantNameCollator.compare(left.name, right.name);
 
       if (sortBy === "name") {
-        return left.name.localeCompare(right.name, "ko") * direction;
+        return nameOrder * direction;
       }
 
       if (sortBy === "visitCount") {
         return (
-          (countVisits(left.id) - countVisits(right.id) ||
-            left.name.localeCompare(right.name, "ko")) *
+          (countVisits(left.id) - countVisits(right.id) || nameOrder) *
           direction
         );
       }
 
       return (
-        (latestVisit(left.id) - latestVisit(right.id) ||
-          left.name.localeCompare(right.name, "ko")) * direction
+        (latestVisit(left.id) - latestVisit(right.id) || nameOrder) * direction
       );
     });
   }, [restaurants, query, sortBy, sortDirection, visits]);
@@ -131,7 +167,38 @@ export default function RestaurantsPage() {
     return times.length ? Math.max(...times) : 0;
   }
 
+  function restaurantLabel(restaurantId: string) {
+    const restaurant = restaurants.find((item) => item.id === restaurantId);
+
+    if (!restaurant) {
+      return "식당";
+    }
+
+    return [restaurant.name, restaurant.branch_name].filter(Boolean).join(" ");
+  }
+
+  function menuName(item: NonNullable<RecentVisit["visit_menu_items"]>[number]) {
+    const linkedMenuName = Array.isArray(item.menu_items)
+      ? item.menu_items[0]?.name
+      : item.menu_items?.name;
+
+    return item.manual_menu_name ?? linkedMenuName ?? "메뉴";
+  }
+
+  function profileName(visit: RecentVisit) {
+    const profile = Array.isArray(visit.profiles) ? visit.profiles[0] : visit.profiles;
+
+    return profile?.display_name ?? "프로필";
+  }
+
+  function visitPhotoUrl(visit: RecentVisit) {
+    return visit.visit_photos?.find((photo) => photo.signedUrl)?.signedUrl;
+  }
+
   async function handleProfileChange() {
+    clearCachedJson("/api/session");
+    clearCachedJson("/api/restaurants");
+    clearCachedJson("/api/visits");
     await fetch("/api/session", { method: "DELETE" });
     router.refresh();
     window.location.href = "/profiles";
@@ -152,7 +219,14 @@ export default function RestaurantsPage() {
           </button>
         ) : null
       }
-      titleAction={authenticated ? <PrimaryLink href="/restaurants/new">식당 추가</PrimaryLink> : null}
+      titleAction={
+        authenticated ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <SecondaryLink href="/map">지도</SecondaryLink>
+            <PrimaryLink href="/restaurants/new">식당 추가</PrimaryLink>
+          </div>
+        ) : null
+      }
     >
       {!configured ? <SetupRequired /> : null}
       {configured && loading ? <LoadingState /> : null}
@@ -169,9 +243,14 @@ export default function RestaurantsPage() {
             <div className="grid grid-cols-[1fr_44px] gap-3 sm:contents">
               <SelectInput
                 value={sortBy}
-                onChange={(event) =>
-                  setSortBy(event.target.value as "name" | "lastVisit" | "visitCount")
-                }
+                onChange={(event) => {
+                  const nextSortBy = event.target.value as
+                    | "name"
+                    | "lastVisit"
+                    | "visitCount";
+                  setSortBy(nextSortBy);
+                  setSortDirection(nextSortBy === "name" ? "asc" : "desc");
+                }}
               >
                 <option value="lastVisit">최근 방문</option>
                 <option value="visitCount">최다 방문</option>
@@ -194,60 +273,150 @@ export default function RestaurantsPage() {
           {dataLoading ? <LoadingState /> : null}
           {dataError ? <p className="mt-4 text-sm text-red-700">{dataError}</p> : null}
 
-          <div className="mt-6 grid gap-3">
-            {visibleRestaurants.map((restaurant) => {
-              const triedCount = visitCount(restaurant.id);
-              const knownItems = knownMenuCounts[restaurant.id] ?? 0;
-              const lastVisit = lastVisitTime(restaurant.id);
+          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+            <div className="grid gap-3">
+              {visibleRestaurants.map((restaurant) => {
+                const triedCount = visitCount(restaurant.id);
+                const unlockedMenus = unlockedMenuCounts[restaurant.id] ?? 0;
+                const lastVisit = lastVisitTime(restaurant.id);
 
-              return (
-                <Link
-                  key={restaurant.id}
-                  href={`/restaurants/${restaurant.id}`}
-                  className="flex items-start gap-3 border border-line bg-white/75 p-4"
-                >
-                  {restaurant.iconUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={restaurant.iconUrl}
-                      alt=""
-                      className="h-12 w-12 shrink-0 border border-line bg-white object-contain"
-                    />
-                  ) : (
-                    <div className="grid h-12 w-12 shrink-0 place-items-center border border-line bg-white text-sm font-semibold text-ink/50">
-                      {restaurant.name.slice(0, 1)}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <h2 className="break-words text-lg font-semibold">{restaurant.name}</h2>
-                      {restaurant.branch_name ? (
-                        <p className="text-sm text-ink/55">{restaurant.branch_name}</p>
+                return (
+                  <Link
+                    key={restaurant.id}
+                    href={`/restaurants/${restaurant.id}`}
+                    className="flex items-start gap-3 border border-line bg-white/75 p-4"
+                  >
+                    {restaurant.iconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={restaurant.iconUrl}
+                        alt=""
+                        className="h-12 w-12 shrink-0 border border-line bg-white object-contain"
+                      />
+                    ) : (
+                      <div className="grid h-12 w-12 shrink-0 place-items-center border border-line bg-white text-sm font-semibold text-ink/50">
+                        {restaurant.name.slice(0, 1)}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <h2 className="break-words text-lg font-semibold">{restaurant.name}</h2>
+                        {restaurant.branch_name ? (
+                          <p className="text-sm text-ink/55">{restaurant.branch_name}</p>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-sm text-ink/60">
+                        {triedCount}회 방문 · 해금된 메뉴{" "}
+                        {restaurant.total_menu_goal !== null && restaurant.total_menu_goal > 0
+                          ? `${unlockedMenus}/${restaurant.total_menu_goal}`
+                          : `${unlockedMenus}/?`}
+                        {lastVisit
+                          ? ` · 최근 방문 ${new Date(lastVisit).toISOString().slice(0, 10)}`
+                          : ""}
+                      </p>
+                      {restaurant.cuisine_category || restaurant.food_type ? (
+                        <p className="mt-1 text-sm text-ink/60">
+                          {[
+                            formatMultiValue(restaurant.cuisine_category),
+                            formatMultiValue(restaurant.food_type),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      ) : null}
+                      {restaurant.notes ? (
+                        <p className="mt-2 text-sm text-ink/60">{restaurant.notes}</p>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-sm text-ink/60">
-                      방문 {triedCount}회 · 알려진 메뉴 {knownItems}개
-                      {lastVisit
-                        ? ` · 최근 방문 ${new Date(lastVisit).toISOString().slice(0, 10)}`
-                        : ""}
-                    </p>
-                    {restaurant.cuisine_category || restaurant.food_type ? (
-                      <p className="mt-1 text-sm text-ink/60">
-                        {[
-                          formatMultiValue(restaurant.cuisine_category),
-                          formatMultiValue(restaurant.food_type),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                    ) : null}
-                    {restaurant.notes ? (
-                      <p className="mt-2 text-sm text-ink/60">{restaurant.notes}</p>
-                    ) : null}
+                  </Link>
+                );
+              })}
+            </div>
+
+            <aside className="order-first grid gap-4 lg:sticky lg:top-5 lg:order-none">
+              <section className="border border-line bg-white/60 p-4">
+                <h2 className="text-base font-semibold">식당 위치</h2>
+                <div className="mt-3">
+                  <KakaoMap
+                    restaurants={restaurants}
+                    heightClassName="h-64 min-h-64"
+                    showRestaurantList={false}
+                  />
+                </div>
+              </section>
+
+              <section className="border border-line bg-white/60 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold">최근 방문</h2>
+                    <div className="mt-2 inline-flex border border-line bg-white text-sm">
+                      <button
+                        type="button"
+                        onClick={() => setRecentScope("mine")}
+                        className={`min-h-9 px-3 ${
+                          recentScope === "mine" ? "bg-ink text-white" : "text-ink"
+                        }`}
+                      >
+                        내 최근
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRecentScope("all")}
+                        className={`min-h-9 px-3 ${
+                          recentScope === "all" ? "bg-ink text-white" : "text-ink"
+                        }`}
+                      >
+                        전체 최근
+                      </button>
+                    </div>
                   </div>
-                </Link>
-              );
-            })}
+                  <Link
+                    href={`/visits?scope=${recentScope}`}
+                    className="shrink-0 text-sm font-medium text-leaf underline"
+                  >
+                    더 보기
+                  </Link>
+                </div>
+                <div className="mt-3 grid gap-3">
+                  {(recentScope === "mine" ? recentVisits : allRecentVisits).map((visit) => (
+                    <Link
+                      key={visit.id}
+                      href={`/restaurants/${visit.restaurant_id}`}
+                      className="block border border-line bg-white/75 p-3"
+                    >
+                      <p className="truncate font-medium">{restaurantLabel(visit.restaurant_id)}</p>
+                      <p className="mt-1 text-sm text-ink/55">
+                        {visit.visited_at.slice(0, 10)} · {mealLabels[visit.meal_type]}
+                        {" · "}
+                        {profileName(visit)}
+                      </p>
+                      <div className="mt-2 grid gap-1">
+                        {(visit.visit_menu_items ?? []).map((item, index) => (
+                          <div
+                            key={`${visit.id}-${index}`}
+                            className="flex min-w-0 items-center justify-between gap-2 text-sm"
+                          >
+                            <span className="truncate">{menuName(item)}</span>
+                            <RatingDisplay value={item.rating} />
+                          </div>
+                        ))}
+                      </div>
+                      {visitPhotoUrl(visit) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={visitPhotoUrl(visit)}
+                          alt=""
+                          className="mt-2 h-12 w-12 border border-line bg-white object-cover"
+                        />
+                      ) : null}
+                    </Link>
+                  ))}
+                  {(recentScope === "mine" ? recentVisits : allRecentVisits).length === 0 ? (
+                    <p className="text-sm text-ink/60">아직 방문 기록이 없습니다.</p>
+                  ) : null}
+                </div>
+              </section>
+            </aside>
           </div>
 
           {!dataLoading && visibleRestaurants.length === 0 ? (

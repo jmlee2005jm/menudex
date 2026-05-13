@@ -15,7 +15,9 @@ import {
   TextInput,
 } from "@/components/form-fields";
 import { PageShell, SecondaryLink } from "@/components/page-shell";
+import { PasteImageInput } from "@/components/paste-image-input";
 import { RatingField } from "@/components/rating-field";
+import { clearCachedJson } from "@/lib/client-cache";
 import {
   defaultMealType,
   todayDateValue,
@@ -56,18 +58,15 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
     setRatingError("");
     setSubmitError("");
 
+    form.set("visitedAt", String(form.get("visitedAt") ?? "").trim() || todayDateValue());
+    form.set("mealType", String(form.get("mealType") ?? "other"));
+    form.set("menuName", menuName);
+    form.set("rating", ratingValue);
+    form.set("review", String(form.get("review") ?? "").trim());
+
     const response = await fetch(`/api/restaurants/${restaurantId}/visits`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        visitedAt: String(form.get("visitedAt") ?? "").trim() || todayDateValue(),
-        mealType: String(form.get("mealType") ?? "other"),
-        menuName,
-        rating: ratingValue,
-        review: String(form.get("review") ?? "").trim(),
-      }),
+      body: form,
     });
     const data = (await response.json()) as { error?: string };
 
@@ -76,6 +75,9 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
+    clearCachedJson(`/api/restaurants/${restaurantId}`);
+    clearCachedJson("/api/restaurants");
+    clearCachedJson("/api/visits");
     router.push(`/restaurants/${restaurantId}`);
   }
 
@@ -117,6 +119,9 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
           </Field>
           <Field label="짧은 리뷰">
             <TextInput name="review" placeholder="짧은 리뷰" />
+          </Field>
+          <Field label="방문 사진">
+            <PasteImageInput name="visitPhoto" accept="image/*" compact preview />
           </Field>
           <SubmitButton>방문 기록 저장</SubmitButton>
           {submitError ? <p className="text-sm text-red-700">{submitError}</p> : null}

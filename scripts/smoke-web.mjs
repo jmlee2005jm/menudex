@@ -33,6 +33,8 @@ async function expectPageContainsAny(path, expectedTexts) {
 await expectStatus("/", 307);
 await expectPageContains("/profiles", "프로필 선택");
 await expectPageContains("/restaurants", "식당 목록");
+await expectPageContains("/visits", "최근 방문");
+await expectPageContains("/map", "식당 지도");
 await expectPageContainsAny("/restaurants", [
   "식당 추가",
   "MenuDex 설정이 필요합니다",

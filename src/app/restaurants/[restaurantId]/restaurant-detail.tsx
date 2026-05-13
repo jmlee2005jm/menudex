@@ -3,17 +3,19 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ExternalLink } from "lucide-react";
 import {
   LoadingState,
   LoginRequired,
   SetupRequired,
 } from "@/components/app-state";
 import { Field, SubmitButton, TextInput } from "@/components/form-fields";
+import { KakaoMap } from "@/components/kakao-map";
 import { MenuPhotoCard } from "@/components/menu-photo-annotator";
 import { formatMultiValue } from "@/components/multi-select-field";
 import { PageShell, PrimaryLink, SecondaryLink } from "@/components/page-shell";
+import { PasteImageInput } from "@/components/paste-image-input";
 import { RatingDisplay, RatingField } from "@/components/rating-field";
+import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
 import type {
   MenuItemRow,
   MenuPhotoRow,
@@ -28,6 +30,13 @@ const mealLabels = {
   dinner: "저녁",
   other: "기타",
 };
+
+function hasRestaurantCoordinates(restaurant: RestaurantRow) {
+  return (
+    typeof restaurant.latitude === "number" &&
+    typeof restaurant.longitude === "number"
+  );
+}
 
 export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
   const router = useRouter();
@@ -53,19 +62,14 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
 
     async function loadData() {
       setDataLoading(true);
+      const url = `/api/restaurants/${restaurantId}${visitScope === "all" ? "?visits=all" : ""}`;
 
-      const response = await fetch(
-        `/api/restaurants/${restaurantId}${visitScope === "all" ? "?visits=all" : ""}`,
-        {
-        cache: "no-store",
-        },
-      );
-      const data = (await response.json()) as {
+      const data = await getCachedJson<{
         restaurant: RestaurantRow | null;
         menuPhotos: MenuPhotoRow[];
         menuItems: MenuItemRow[];
         visits: VisitWithMenu[];
-      };
+      }>(url, 10_000);
 
       if (!mounted) {
         return;
@@ -103,6 +107,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
           review: item.review,
           profileId: visit.profile_id,
           profileName: visit.profiles?.display_name ?? "프로필",
+          photoUrl: visit.visit_photos?.find((photo) => photo.signedUrl)?.signedUrl,
         })),
       ),
     [visits],
@@ -124,6 +129,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
+    clearCachedJson("/api/restaurants");
     router.push("/restaurants");
   }
 
@@ -180,6 +186,9 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
       return false;
     }
 
+    clearCachedJson(`/api/restaurants/${restaurantId}`);
+    clearCachedJson("/api/restaurants");
+    clearCachedJson("/api/visits");
     return true;
   }
 
@@ -215,18 +224,15 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
     }
 
     setEditError("");
+    form.set("visitId", visit.visitId);
+    form.set("visitMenuItemId", visit.visitMenuItemId);
+    form.set("menuName", menuName);
+    form.set("rating", rating);
+    form.set("review", String(form.get("review") ?? "").trim());
+
     const response = await fetch(`/api/restaurants/${restaurantId}/visits`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        visitId: visit.visitId,
-        visitMenuItemId: visit.visitMenuItemId,
-        menuName,
-        rating,
-        review: String(form.get("review") ?? "").trim(),
-      }),
+      body: form,
     });
     const data = (await response.json()) as { error?: string };
 
@@ -235,6 +241,9 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
+    clearCachedJson(`/api/restaurants/${restaurantId}`);
+    clearCachedJson("/api/restaurants");
+    clearCachedJson("/api/visits");
     setVisits((current) =>
       current.map((currentVisit) => {
         if (currentVisit.id !== visit.visitId) {
@@ -243,6 +252,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
 
         return {
           ...currentVisit,
+          visit_photos: updateLocalVisitPhotos(currentVisit.visit_photos, form),
           visit_menu_items: currentVisit.visit_menu_items.map((item) =>
             item.id === visit.visitMenuItemId
               ? {
@@ -257,6 +267,29 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
       }),
     );
     cancelEditingReview();
+  }
+
+  function updateLocalVisitPhotos(photos: VisitWithMenu["visit_photos"], form: FormData) {
+    const newPhoto = form.get("visitPhoto");
+
+    if (newPhoto instanceof File && newPhoto.size > 0) {
+      return [
+        {
+          id: "local-preview",
+          visit_id: "",
+          profile_id: "",
+          storage_path: "",
+          signedUrl: URL.createObjectURL(newPhoto),
+          created_at: "",
+        },
+      ];
+    }
+
+    if (form.get("deleteVisitPhoto") === "true") {
+      return [];
+    }
+
+    return photos;
   }
 
   if (!configured) {
@@ -301,42 +334,61 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
       {deleteError ? <p className="mt-4 text-sm text-red-700">{deleteError}</p> : null}
       {restaurant ? (
         <>
-          <div className="mt-4 flex items-start gap-3">
-            {restaurant.iconUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={restaurant.iconUrl}
-                alt=""
-                className="h-14 w-14 shrink-0 border border-line bg-white object-contain"
-              />
-            ) : null}
-            <div className="min-w-0 space-y-2 text-sm text-ink/65">
-              {restaurant.branch_name ? (
-                <p className="text-base font-medium text-ink/70">{restaurant.branch_name}</p>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+            <div className="flex items-start gap-3">
+              {restaurant.iconUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={restaurant.iconUrl}
+                  alt=""
+                  className="h-14 w-14 shrink-0 border border-line bg-white object-contain"
+                />
               ) : null}
-              {restaurant.cuisine_category || restaurant.food_type ? (
-                <p>
-                  {[
-                    formatMultiValue(restaurant.cuisine_category),
-                    formatMultiValue(restaurant.food_type),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-              ) : null}
-              {restaurant.map_url ? (
-                <a
-                  className="inline-flex items-center gap-1 text-leaf underline"
-                  href={restaurant.map_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  지도 링크 열기
-                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                </a>
-              ) : null}
-            {restaurant.notes ? <p>{restaurant.notes}</p> : null}
+              <div className="min-w-0 space-y-1 text-sm leading-tight text-ink/65">
+                {restaurant.branch_name ? (
+                  <p className="text-base font-medium leading-tight text-ink/70">
+                    {restaurant.branch_name}
+                  </p>
+                ) : null}
+                {restaurant.cuisine_category || restaurant.food_type ? (
+                  <p>
+                    {[
+                      formatMultiValue(restaurant.cuisine_category),
+                      formatMultiValue(restaurant.food_type),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                ) : null}
+                {restaurant.notes ? <p>{restaurant.notes}</p> : null}
+              </div>
             </div>
+            <section className="border border-line bg-white/60 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold">위치</h2>
+                {!hasRestaurantCoordinates(restaurant) ? (
+                  <Link
+                    href={`/restaurants/${restaurantId}/edit`}
+                    className="text-sm font-medium text-leaf underline"
+                  >
+                    위치 추가
+                  </Link>
+                ) : null}
+              </div>
+              <div className="mt-2">
+                {hasRestaurantCoordinates(restaurant) ? (
+                  <KakaoMap
+                    restaurants={[restaurant]}
+                    heightClassName="h-48 min-h-48 sm:h-56"
+                    showRestaurantList={false}
+                  />
+                ) : (
+                  <p className="text-sm text-ink/60">
+                    식당 수정에서 장소를 검색하거나 지도에서 위치를 선택하세요.
+                  </p>
+                )}
+              </div>
+            </section>
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
@@ -412,6 +464,35 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                         <Field label="짧은 리뷰">
                           <TextInput name="review" defaultValue={visit.review ?? ""} />
                         </Field>
+                        <Field label="방문 사진">
+                          <div className="grid gap-2">
+                            {visit.photoUrl ? (
+                              <div className="flex items-center gap-3">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={visit.photoUrl}
+                                  alt=""
+                                  className="h-14 w-14 border border-line bg-white object-cover"
+                                />
+                                <label className="flex min-h-10 items-center gap-2 text-sm text-ink/70">
+                                  <input
+                                    type="checkbox"
+                                    name="deleteVisitPhoto"
+                                    value="true"
+                                    className="h-4 w-4"
+                                  />
+                                  사진 삭제
+                                </label>
+                              </div>
+                            ) : null}
+                            <PasteImageInput
+                              name="visitPhoto"
+                              accept="image/*"
+                              compact
+                              preview
+                            />
+                          </div>
+                        </Field>
                         <div className="flex flex-wrap gap-2">
                           <SubmitButton>수정 저장</SubmitButton>
                           <button
@@ -447,6 +528,14 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                         </div>
                         {visit.review ? (
                           <p className="mt-2 break-words text-sm">{visit.review}</p>
+                        ) : null}
+                        {visit.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={visit.photoUrl}
+                            alt=""
+                            className="mt-2 h-14 w-14 border border-line bg-white object-cover"
+                          />
                         ) : null}
                       </>
                     )}

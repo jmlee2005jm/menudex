@@ -5,6 +5,7 @@ import { SetupRequired } from "@/components/app-state";
 import { Field, SubmitButton, TextInput } from "@/components/form-fields";
 import { PageShell } from "@/components/page-shell";
 import { PasteImageInput } from "@/components/paste-image-input";
+import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
 import type { ProfileRow } from "@/lib/supabase/types";
 
 const defaultProfileIcon = "/defaulticon.png";
@@ -25,12 +26,11 @@ export default function ProfilesPage() {
 
   async function loadProfiles() {
     setLoading(true);
-    const response = await fetch("/api/profiles", { cache: "no-store" });
-    const data = (await response.json()) as {
+    const data = await getCachedJson<{
       configured?: boolean;
       profiles?: ProfileRow[];
       error?: string;
-    };
+    }>("/api/profiles", 30_000);
 
     setConfigured(Boolean(data.configured));
     setProfiles(data.profiles ?? []);
@@ -47,6 +47,9 @@ export default function ProfilesPage() {
     });
 
     if (response.ok) {
+      clearCachedJson("/api/session");
+      clearCachedJson("/api/restaurants");
+      clearCachedJson("/api/visits");
       window.location.href = "/restaurants";
     }
   }
@@ -75,6 +78,7 @@ export default function ProfilesPage() {
       return;
     }
 
+    clearCachedJson("/api/profiles");
     await selectProfile(data.id);
   }
 
@@ -102,6 +106,8 @@ export default function ProfilesPage() {
       return;
     }
 
+    clearCachedJson("/api/profiles");
+    clearCachedJson("/api/session");
     setEditingProfileId("");
     await loadProfiles();
   }
@@ -128,6 +134,9 @@ export default function ProfilesPage() {
       return;
     }
 
+    clearCachedJson("/api/profiles");
+    clearCachedJson("/api/session");
+    clearCachedJson("/api/visits");
     await fetch("/api/session", { method: "DELETE" });
     setEditingProfileId("");
     await loadProfiles();

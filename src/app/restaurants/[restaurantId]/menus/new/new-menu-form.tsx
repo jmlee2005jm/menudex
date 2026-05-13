@@ -10,6 +10,7 @@ import {
 import { DateSelectInput, Field, SubmitButton, TextInput } from "@/components/form-fields";
 import { PageShell, SecondaryLink } from "@/components/page-shell";
 import { PasteImageInput } from "@/components/paste-image-input";
+import { clearCachedJson } from "@/lib/client-cache";
 import { todayDateValue } from "@/lib/date";
 import { useAppSession } from "@/lib/use-app-session";
 
@@ -78,6 +79,8 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
+    clearCachedJson(`/api/restaurants/${restaurantId}`);
+    clearCachedJson("/api/restaurants");
     router.push(`/restaurants/${restaurantId}`);
   }
 
@@ -117,6 +120,7 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
+    clearCachedJson(`/api/restaurants/${restaurantId}`);
     router.push(`/restaurants/${restaurantId}`);
   }
 
