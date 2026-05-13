@@ -8,6 +8,8 @@ export function PageShell({
   title,
   action,
   titleAction,
+  titleAside,
+  titleBody,
   showProfile = true,
 }: {
   children: ReactNode;
@@ -15,6 +17,8 @@ export function PageShell({
   title: string;
   action?: ReactNode;
   titleAction?: ReactNode;
+  titleAside?: ReactNode;
+  titleBody?: ReactNode;
   showProfile?: boolean;
 }) {
   return (
@@ -36,12 +40,27 @@ export function PageShell({
           {eyebrow ? (
             <p className="text-sm font-medium text-leaf">{eyebrow}</p>
           ) : null}
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-3xl font-semibold tracking-normal break-words sm:text-4xl">
-              {title}
-            </h1>
-            {titleAction ? <div className="shrink-0">{titleAction}</div> : null}
-          </div>
+          {titleAside ? (
+            <div className="mt-2 grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h1 className="text-3xl font-semibold tracking-normal break-words sm:text-4xl">
+                    {title}
+                  </h1>
+                  {titleAction ? <div className="shrink-0">{titleAction}</div> : null}
+                </div>
+                {titleBody ? <div className="mt-4">{titleBody}</div> : null}
+              </div>
+              <div>{titleAside}</div>
+            </div>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <h1 className="text-3xl font-semibold tracking-normal break-words sm:text-4xl">
+                {title}
+              </h1>
+              {titleAction ? <div className="shrink-0">{titleAction}</div> : null}
+            </div>
+          )}
           {children}
         </section>
       </div>

@@ -38,6 +38,109 @@ function hasRestaurantCoordinates(restaurant: RestaurantRow) {
   );
 }
 
+function RestaurantLocationCard({
+  restaurant,
+  restaurantId,
+}: {
+  restaurant: RestaurantRow;
+  restaurantId: string;
+}) {
+  return (
+    <section className="border border-line bg-white/60 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">위치</h2>
+        {!hasRestaurantCoordinates(restaurant) ? (
+          <Link
+            href={`/restaurants/${restaurantId}/edit`}
+            className="text-sm font-medium text-leaf underline"
+          >
+            위치 추가
+          </Link>
+        ) : null}
+      </div>
+      <div className="mt-2">
+        {hasRestaurantCoordinates(restaurant) ? (
+          <KakaoMap
+            restaurants={[restaurant]}
+            heightClassName="h-48 min-h-48 sm:h-56"
+            showRestaurantList={false}
+          />
+        ) : (
+          <p className="text-sm text-ink/60">
+            식당 수정에서 장소를 검색하거나 지도에서 위치를 선택하세요.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function RestaurantHeaderBody({
+  restaurant,
+  restaurantId,
+  deleteRestaurant,
+}: {
+  restaurant: RestaurantRow;
+  restaurantId: string;
+  deleteRestaurant: () => void;
+}) {
+  return (
+    <div className="grid gap-5">
+      <div className="flex items-start gap-3">
+        {restaurant.iconUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={restaurant.iconUrl}
+            alt=""
+            className="h-14 w-14 shrink-0 border border-line bg-white object-contain"
+          />
+        ) : null}
+        <div className="min-w-0 space-y-1 text-sm leading-tight text-ink/65">
+          {restaurant.branch_name ? (
+            <p className="text-base font-medium leading-tight text-ink/70">
+              {restaurant.branch_name}
+            </p>
+          ) : null}
+          {restaurant.cuisine_category || restaurant.food_type ? (
+            <p>
+              {[
+                formatMultiValue(restaurant.cuisine_category),
+                formatMultiValue(restaurant.food_type),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          ) : null}
+          {restaurant.notes ? <p>{restaurant.notes}</p> : null}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
+        <Link
+          href={`/restaurants/${restaurantId}/visits/new`}
+          className="inline-flex min-h-12 items-center justify-center bg-leaf px-5 text-sm font-semibold text-white sm:order-none"
+        >
+          방문 기록 추가
+        </Link>
+        <PrimaryLink href={`/restaurants/${restaurantId}/menus/new`}>
+          메뉴 추가
+        </PrimaryLink>
+        <PrimaryLink href={`/restaurants/${restaurantId}/edit`}>
+          식당 수정
+        </PrimaryLink>
+        <button
+          type="button"
+          onClick={deleteRestaurant}
+          className="inline-flex min-h-11 items-center justify-center border border-red-200 bg-white px-4 text-sm font-medium text-red-700"
+        >
+          식당 삭제
+        </button>
+      </div>
+
+    </div>
+  );
+}
+
 export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
   const router = useRouter();
   const { authenticated, loading, configured, profile } = useAppSession();
@@ -329,119 +432,56 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
       eyebrow="식당"
       title={restaurant?.name ?? "식당 불러오는 중"}
       action={<SecondaryLink href="/restaurants">전체 식당</SecondaryLink>}
+      titleAside={
+        restaurant ? (
+          <RestaurantLocationCard restaurant={restaurant} restaurantId={restaurantId} />
+        ) : null
+      }
+      titleBody={
+        restaurant ? (
+          <RestaurantHeaderBody
+            restaurant={restaurant}
+            restaurantId={restaurantId}
+            deleteRestaurant={deleteRestaurant}
+          />
+        ) : null
+      }
     >
       {dataLoading ? <LoadingState /> : null}
       {deleteError ? <p className="mt-4 text-sm text-red-700">{deleteError}</p> : null}
       {restaurant ? (
         <>
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-            <div className="flex items-start gap-3">
-              {restaurant.iconUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={restaurant.iconUrl}
-                  alt=""
-                  className="h-14 w-14 shrink-0 border border-line bg-white object-contain"
-                />
-              ) : null}
-              <div className="min-w-0 space-y-1 text-sm leading-tight text-ink/65">
-                {restaurant.branch_name ? (
-                  <p className="text-base font-medium leading-tight text-ink/70">
-                    {restaurant.branch_name}
-                  </p>
-                ) : null}
-                {restaurant.cuisine_category || restaurant.food_type ? (
-                  <p>
-                    {[
-                      formatMultiValue(restaurant.cuisine_category),
-                      formatMultiValue(restaurant.food_type),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                ) : null}
-                {restaurant.notes ? <p>{restaurant.notes}</p> : null}
+          <section className="mt-3">
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <h2 className="text-xl font-semibold">방문 기록</h2>
+              <div className="inline-flex border border-line bg-white">
+                <button
+                  type="button"
+                  onClick={() => setVisitScope("mine")}
+                  className={`min-h-10 px-4 text-sm font-medium ${
+                    visitScope === "mine" ? "bg-ink text-white" : "text-ink"
+                  }`}
+                >
+                  내 기록
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisitScope("all")}
+                  className={`min-h-10 px-4 text-sm font-medium ${
+                    visitScope === "all" ? "bg-ink text-white" : "text-ink"
+                  }`}
+                >
+                  전체 기록
+                </button>
               </div>
-            </div>
-            <section className="border border-line bg-white/60 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-base font-semibold">위치</h2>
-                {!hasRestaurantCoordinates(restaurant) ? (
-                  <Link
-                    href={`/restaurants/${restaurantId}/edit`}
-                    className="text-sm font-medium text-leaf underline"
-                  >
-                    위치 추가
-                  </Link>
-                ) : null}
-              </div>
-              <div className="mt-2">
-                {hasRestaurantCoordinates(restaurant) ? (
-                  <KakaoMap
-                    restaurants={[restaurant]}
-                    heightClassName="h-48 min-h-48 sm:h-56"
-                    showRestaurantList={false}
-                  />
-                ) : (
-                  <p className="text-sm text-ink/60">
-                    식당 수정에서 장소를 검색하거나 지도에서 위치를 선택하세요.
-                  </p>
-                )}
-              </div>
-            </section>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
-            <Link
-              href={`/restaurants/${restaurantId}/visits/new`}
-              className="inline-flex min-h-12 items-center justify-center bg-leaf px-5 text-sm font-semibold text-white sm:order-none"
-            >
-              방문 기록 추가
-            </Link>
-            <PrimaryLink href={`/restaurants/${restaurantId}/menus/new`}>
-              메뉴 추가
-            </PrimaryLink>
-            <PrimaryLink href={`/restaurants/${restaurantId}/edit`}>
-              식당 수정
-            </PrimaryLink>
-            <button
-              type="button"
-              onClick={deleteRestaurant}
-              className="inline-flex min-h-11 items-center justify-center border border-red-200 bg-white px-4 text-sm font-medium text-red-700"
-            >
-              식당 삭제
-            </button>
-          </div>
-
-          <section className="mt-8">
-            <h2 className="text-xl font-semibold">방문 기록</h2>
-            <div className="mt-3 inline-flex border border-line bg-white">
-              <button
-                type="button"
-                onClick={() => setVisitScope("mine")}
-                className={`min-h-10 px-4 text-sm font-medium ${
-                  visitScope === "mine" ? "bg-ink text-white" : "text-ink"
-                }`}
-              >
-                내 기록
-              </button>
-              <button
-                type="button"
-                onClick={() => setVisitScope("all")}
-                className={`min-h-10 px-4 text-sm font-medium ${
-                  visitScope === "all" ? "bg-ink text-white" : "text-ink"
-                }`}
-              >
-                전체 기록
-              </button>
             </div>
             <div className="mt-3 grid gap-2">
               {visitCards.map((visit) => (
                 <div
                   key={visit.id}
-                  className="flex flex-col gap-3 border border-line bg-white/70 p-3 sm:flex-row sm:items-start sm:justify-between"
+                  className="flex flex-col gap-2 border border-line bg-white/70 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 self-stretch sm:self-auto">
                     {editingReviewId === visit.id ? (
                       <form
                         noValidate
@@ -508,40 +548,40 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                         ) : null}
                       </form>
                     ) : (
-                      <>
+                      <div className="flex min-h-10 flex-col justify-center">
                         <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1">
-                          <p className="break-words font-medium">{visit.menuName}</p>
-                          <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm text-ink/60">
+                          <p className="break-words font-medium leading-tight">{visit.menuName}</p>
+                          <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-tight text-ink/60">
                             <span className="hidden sm:inline">·</span>
-                          <span>{visit.visitedAt}</span>
-                          <span>·</span>
-                          <span>{mealLabels[visit.mealType]}</span>
-                          {visitScope === "all" ? (
-                            <>
-                              <span>·</span>
-                              <span>{visit.profileName}</span>
-                            </>
-                          ) : null}
-                          <span>·</span>
+                            <span>{visit.visitedAt}</span>
+                            <span>·</span>
+                            <span>{mealLabels[visit.mealType]}</span>
+                            {visitScope === "all" ? (
+                              <>
+                                <span>·</span>
+                                <span>{visit.profileName}</span>
+                              </>
+                            ) : null}
+                            <span>·</span>
                             <RatingDisplay value={visit.rating} />
                           </div>
                         </div>
                         {visit.review ? (
                           <p className="mt-2 break-words text-sm">{visit.review}</p>
                         ) : null}
-                        {visit.photoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={visit.photoUrl}
-                            alt=""
-                            className="mt-2 h-14 w-14 border border-line bg-white object-cover"
-                          />
-                        ) : null}
-                      </>
+                      </div>
                     )}
                   </div>
+                  {editingReviewId !== visit.id && visit.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={visit.photoUrl}
+                      alt=""
+                      className="h-14 w-14 shrink-0 self-start border border-line bg-white object-cover sm:self-center"
+                    />
+                  ) : null}
                   {editingReviewId === visit.id || visit.profileId !== profile?.id ? null : (
-                    <div className="flex shrink-0 justify-end gap-2 sm:flex-row">
+                    <div className="flex shrink-0 justify-end gap-2 self-start sm:self-center">
                       <button
                         type="button"
                         onClick={() => startEditingReview(visit)}
