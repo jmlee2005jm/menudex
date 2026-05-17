@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import {
   LoadingState,
   LoginRequired,
@@ -15,7 +15,6 @@ import {
   TextInput,
 } from "@/components/form-fields";
 import { PageShell, SecondaryLink } from "@/components/page-shell";
-import { PasteImageInput } from "@/components/paste-image-input";
 import { RatingField } from "@/components/rating-field";
 import { clearCachedJson } from "@/lib/client-cache";
 import {
@@ -28,27 +27,44 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
   const router = useRouter();
   const { authenticated, loading, configured } = useAppSession();
   const [menuNameError, setMenuNameError] = useState("");
-  const [rating, setRating] = useState("");
+  const [menuRows, setMenuRows] = useState([{ id: crypto.randomUUID(), rating: "" }]);
   const [ratingError, setRatingError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [photoPreviews, setPhotoPreviews] = useState<Record<string, string[]>>({});
+  const photoPreviewsRef = useRef(photoPreviews);
+
+  useEffect(() => {
+    photoPreviewsRef.current = photoPreviews;
+  }, [photoPreviews]);
+
+  useEffect(
+    () => () => {
+      Object.values(photoPreviewsRef.current)
+        .flat()
+        .forEach((url) => URL.revokeObjectURL(url));
+    },
+    [],
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!authenticated) {
+    if (!authenticated || submitting) {
       return;
     }
 
     const form = new FormData(event.currentTarget);
-    const menuName = String(form.get("menuName") ?? "").trim();
-    const ratingValue = String(form.get("rating") ?? "").trim();
+    const menuNames = form.getAll("menuName").map((value) => String(value).trim());
+    const ratings = form.getAll("rating").map((value) => String(value).trim());
+    const hasMenuName = menuNames.some(Boolean);
 
-    if (!menuName) {
+    if (!hasMenuName) {
       setMenuNameError("먹은 메뉴를 입력하세요.");
       return;
     }
 
-    if (!ratingValue) {
+    if (menuNames.some((menuName, index) => menuName && !ratings[index])) {
       setMenuNameError("");
       setRatingError("별점을 선택하세요.");
       return;
@@ -57,12 +73,10 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
     setMenuNameError("");
     setRatingError("");
     setSubmitError("");
+    setSubmitting(true);
 
     form.set("visitedAt", String(form.get("visitedAt") ?? "").trim() || todayDateValue());
     form.set("mealType", String(form.get("mealType") ?? "other"));
-    form.set("menuName", menuName);
-    form.set("rating", ratingValue);
-    form.set("review", String(form.get("review") ?? "").trim());
 
     const response = await fetch(`/api/restaurants/${restaurantId}/visits`, {
       method: "POST",
@@ -72,6 +86,7 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
 
     if (!response.ok) {
       setSubmitError(data.error ?? "방문 기록을 저장하지 못했습니다.");
+      setSubmitting(false);
       return;
     }
 
@@ -79,6 +94,43 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
     clearCachedJson("/api/restaurants");
     clearCachedJson("/api/visits");
     router.push(`/restaurants/${restaurantId}`);
+  }
+
+  function updateRating(rowId: string, rating: string) {
+    setMenuRows((current) =>
+      current.map((row) => (row.id === rowId ? { ...row, rating } : row)),
+    );
+    setRatingError("");
+  }
+
+  function addMenuRow() {
+    setMenuRows((current) => [...current, { id: crypto.randomUUID(), rating: "" }]);
+  }
+
+  function removeMenuRow(rowId: string) {
+    setPhotoPreviews((current) => {
+      current[rowId]?.forEach((url) => URL.revokeObjectURL(url));
+      const { [rowId]: _removed, ...rest } = current;
+      void _removed;
+
+      return rest;
+    });
+    setMenuRows((current) =>
+      current.length === 1 ? current : current.filter((row) => row.id !== rowId),
+    );
+  }
+
+  function updatePhotoPreviews(rowId: string, event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+
+    setPhotoPreviews((current) => {
+      current[rowId]?.forEach((url) => URL.revokeObjectURL(url));
+
+      return {
+        ...current,
+        [rowId]: files.map((file) => URL.createObjectURL(file)),
+      };
+    });
   }
 
   return (
@@ -103,27 +155,73 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
               <option value="other">기타</option>
             </SelectInput>
           </Field>
-          <Field label="먹은 메뉴" required error={menuNameError}>
-            <TextInput name="menuName" placeholder="메뉴 이름" />
+          <Field label="먹은 메뉴" required error={menuNameError || ratingError}>
+            <div className="grid gap-3">
+              {menuRows.map((row, index) => (
+                <div key={row.id} className="grid gap-3 border border-line bg-white/60 p-3">
+                  <input name="menuRowId" type="hidden" value={row.id} />
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-ink/65">메뉴 {index + 1}</p>
+                    {menuRows.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => removeMenuRow(row.id)}
+                        className="min-h-9 border border-line bg-white px-3 text-sm font-medium text-ink"
+                      >
+                        삭제
+                      </button>
+                    ) : null}
+                  </div>
+                  <TextInput name="menuName" placeholder="메뉴 이름" />
+                  <RatingField
+                    name="rating"
+                    value={row.rating}
+                    onChange={(nextRating) => updateRating(row.id, nextRating)}
+                  />
+                  <TextInput name="review" placeholder="짧은 리뷰" />
+                  <div>
+                    <p className="text-sm font-medium text-ink/70">메뉴 사진</p>
+                    <div className="mt-1 grid gap-2">
+                      <input
+                        name={`visitPhoto:${row.id}`}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(event) => updatePhotoPreviews(row.id, event)}
+                        className="text-sm text-ink/70"
+                      />
+                      <p className="text-sm text-ink/55">
+                        이 메뉴에 연결할 사진만 선택하세요.
+                      </p>
+                      {photoPreviews[row.id]?.length ? (
+                        <div className="flex max-w-full gap-2 overflow-x-auto">
+                          {photoPreviews[row.id].map((url) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={url}
+                              src={url}
+                              alt=""
+                              className="h-14 w-14 shrink-0 border border-line bg-white object-cover"
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addMenuRow}
+                className="min-h-10 justify-self-start border border-line bg-white px-3 text-sm font-medium text-ink"
+              >
+                메뉴 더 추가
+              </button>
+            </div>
           </Field>
-          <Field label="별점" required>
-            <RatingField
-              name="rating"
-              value={rating}
-              onChange={(nextRating) => {
-                setRating(nextRating);
-                setRatingError("");
-              }}
-              error={ratingError}
-            />
-          </Field>
-          <Field label="짧은 리뷰">
-            <TextInput name="review" placeholder="짧은 리뷰" />
-          </Field>
-          <Field label="방문 사진">
-            <PasteImageInput name="visitPhoto" accept="image/*" compact preview />
-          </Field>
-          <SubmitButton>방문 기록 저장</SubmitButton>
+          <SubmitButton disabled={submitting}>
+            {submitting ? "저장 중..." : "방문 기록 저장"}
+          </SubmitButton>
           {submitError ? <p className="text-sm text-red-700">{submitError}</p> : null}
         </form>
       ) : null}

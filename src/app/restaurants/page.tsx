@@ -12,6 +12,7 @@ import { SelectInput } from "@/components/form-fields";
 import { KakaoMap } from "@/components/kakao-map";
 import { formatMultiValue } from "@/components/multi-select-field";
 import { PageShell, PrimaryLink, SecondaryLink } from "@/components/page-shell";
+import { PhotoLightbox } from "@/components/photo-lightbox";
 import { RatingDisplay } from "@/components/rating-field";
 import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
 import type { RestaurantRow } from "@/lib/supabase/types";
@@ -20,6 +21,7 @@ import { useAppSession } from "@/lib/use-app-session";
 type RestaurantListVisit = {
   restaurant_id: string;
   visited_at: string;
+  created_at?: string;
 };
 
 type RecentVisit = {
@@ -30,8 +32,9 @@ type RecentVisit = {
   created_at: string;
   meal_type: "breakfast" | "lunch" | "dinner" | "other";
   profiles?: { display_name: string | null } | Array<{ display_name: string | null }> | null;
-  visit_photos?: Array<{ signedUrl?: string }>;
+  visit_photos?: Array<{ visit_menu_item_id?: string | null; signedUrl?: string }>;
   visit_menu_items?: Array<{
+    id: string;
     manual_menu_name: string | null;
     rating: number | null;
     menu_items?: { name: string | null } | Array<{ name: string | null }> | null;
@@ -50,6 +53,17 @@ const restaurantNameCollator = new Intl.Collator("ko-KR", {
   sensitivity: "base",
 });
 
+function compareVisitRecency(left: RestaurantListVisit, right: RestaurantListVisit) {
+  return visitSortValue(right) - visitSortValue(left);
+}
+
+function visitSortValue(visit: RestaurantListVisit) {
+  const visitedAt = new Date(visit.visited_at).getTime();
+  const createdAt = visit.created_at ? new Date(visit.created_at).getTime() : 0;
+
+  return visitedAt + createdAt / 10 ** 15;
+}
+
 export default function RestaurantsPage() {
   const router = useRouter();
   const { authenticated, loading, configured } = useAppSession();
@@ -64,6 +78,7 @@ export default function RestaurantsPage() {
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState("");
+  const [lightboxPhotoUrl, setLightboxPhotoUrl] = useState("");
 
   useEffect(() => {
     if (!authenticated) {
@@ -118,12 +133,12 @@ export default function RestaurantsPage() {
   const visibleRestaurants = useMemo(() => {
     const countVisits = (restaurantId: string) =>
       visits.filter((visit) => visit.restaurant_id === restaurantId).length;
-    const latestVisit = (restaurantId: string) => {
-      const times = visits
+    const latestVisitSortValue = (restaurantId: string) => {
+      const latest = visits
         .filter((visit) => visit.restaurant_id === restaurantId)
-        .map((visit) => new Date(visit.visited_at).getTime());
+        .sort(compareVisitRecency)[0];
 
-      return times.length ? Math.max(...times) : 0;
+      return latest ? visitSortValue(latest) : 0;
     };
     const normalized = query.trim().toLowerCase();
     const filtered = !normalized
@@ -150,7 +165,8 @@ export default function RestaurantsPage() {
       }
 
       return (
-        (latestVisit(left.id) - latestVisit(right.id) || nameOrder) * direction
+        (latestVisitSortValue(left.id) - latestVisitSortValue(right.id) || nameOrder) *
+        direction
       );
     });
   }, [restaurants, query, sortBy, sortDirection, visits]);
@@ -160,11 +176,11 @@ export default function RestaurantsPage() {
   }
 
   function lastVisitTime(restaurantId: string) {
-    const times = visits
+    const latest = visits
       .filter((visit) => visit.restaurant_id === restaurantId)
-      .map((visit) => new Date(visit.visited_at).getTime());
+      .sort(compareVisitRecency)[0];
 
-    return times.length ? Math.max(...times) : 0;
+    return latest ? new Date(latest.visited_at).getTime() : 0;
   }
 
   function restaurantLabel(restaurantId: string) {
@@ -189,10 +205,6 @@ export default function RestaurantsPage() {
     const profile = Array.isArray(visit.profiles) ? visit.profiles[0] : visit.profiles;
 
     return profile?.display_name ?? "프로필";
-  }
-
-  function visitPhotoUrl(visit: RecentVisit) {
-    return visit.visit_photos?.find((photo) => photo.signedUrl)?.signedUrl;
   }
 
   async function handleProfileChange() {
@@ -341,6 +353,8 @@ export default function RestaurantsPage() {
                     restaurants={restaurants}
                     heightClassName="h-64 min-h-64"
                     showRestaurantList={false}
+                    defaultToCurrentLocation
+                    level={3}
                   />
                 </div>
               </section>
@@ -379,12 +393,16 @@ export default function RestaurantsPage() {
                 </div>
                 <div className="mt-3 grid gap-3">
                   {(recentScope === "mine" ? recentVisits : allRecentVisits).map((visit) => (
-                    <Link
+                    <div
                       key={visit.id}
-                      href={`/restaurants/${visit.restaurant_id}`}
-                      className="block border border-line bg-white/75 p-3"
+                      className="border border-line bg-white/75 p-3"
                     >
-                      <p className="truncate font-medium">{restaurantLabel(visit.restaurant_id)}</p>
+                      <Link
+                        href={`/restaurants/${visit.restaurant_id}`}
+                        className="block truncate font-medium"
+                      >
+                        {restaurantLabel(visit.restaurant_id)}
+                      </Link>
                       <p className="mt-1 text-sm text-ink/55">
                         {visit.visited_at.slice(0, 10)} · {mealLabels[visit.meal_type]}
                         {" · "}
@@ -396,20 +414,31 @@ export default function RestaurantsPage() {
                             key={`${visit.id}-${index}`}
                             className="flex min-w-0 items-center justify-between gap-2 text-sm"
                           >
-                            <span className="truncate">{menuName(item)}</span>
+                            <div className="flex min-w-0 items-center gap-2">
+                              {visitPhotoUrlForMenu(visit, item.id) ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setLightboxPhotoUrl(visitPhotoUrlForMenu(visit, item.id) ?? "")
+                                  }
+                                  className="shrink-0"
+                                  aria-label="방문 사진 크게 보기"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={visitPhotoUrlForMenu(visit, item.id)}
+                                    alt=""
+                                    className="h-9 w-9 border border-line bg-white object-cover"
+                                  />
+                                </button>
+                              ) : null}
+                              <span className="truncate">{menuName(item)}</span>
+                            </div>
                             <RatingDisplay value={item.rating} />
                           </div>
                         ))}
                       </div>
-                      {visitPhotoUrl(visit) ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={visitPhotoUrl(visit)}
-                          alt=""
-                          className="mt-2 h-12 w-12 border border-line bg-white object-cover"
-                        />
-                      ) : null}
-                    </Link>
+                    </div>
                   ))}
                   {(recentScope === "mine" ? recentVisits : allRecentVisits).length === 0 ? (
                     <p className="text-sm text-ink/60">아직 방문 기록이 없습니다.</p>
@@ -431,8 +460,28 @@ export default function RestaurantsPage() {
               ) : null}
             </div>
           ) : null}
+          {lightboxPhotoUrl ? (
+            <PhotoLightbox
+              imageUrl={lightboxPhotoUrl}
+              onClose={() => setLightboxPhotoUrl("")}
+            />
+          ) : null}
         </>
       ) : null}
     </PageShell>
   );
+}
+
+function visitPhotoUrlForMenu(visit: RecentVisit, visitMenuItemId: string) {
+  return visit.visit_photos?.find((photo) => {
+    if (photo.visit_menu_item_id === visitMenuItemId) {
+      return Boolean(photo.signedUrl);
+    }
+
+    return (
+      !photo.visit_menu_item_id &&
+      (visit.visit_menu_items ?? []).length === 1 &&
+      Boolean(photo.signedUrl)
+    );
+  })?.signedUrl;
 }

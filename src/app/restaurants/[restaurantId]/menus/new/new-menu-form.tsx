@@ -22,8 +22,10 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
   const [converting, setConverting] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [photoSubmitError, setPhotoSubmitError] = useState("");
+  const [photoSubmitting, setPhotoSubmitting] = useState(false);
   const [nameError, setNameError] = useState("");
   const [menuSubmitError, setMenuSubmitError] = useState("");
+  const [menuSubmitting, setMenuSubmitting] = useState(false);
 
   async function handleImageFile(file: File | undefined) {
     if (!file) {
@@ -52,7 +54,7 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
   async function handlePhotoSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!authenticated) {
+    if (!authenticated || photoSubmitting) {
       return;
     }
 
@@ -66,6 +68,7 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
 
     setPhotoError("");
     setPhotoSubmitError("");
+    setPhotoSubmitting(true);
     form.set("menuPhoto", file);
 
     const response = await fetch(`/api/restaurants/${restaurantId}/menu-photos`, {
@@ -76,6 +79,7 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
 
     if (!response.ok) {
       setPhotoSubmitError(data.error ?? "메뉴 사진을 저장하지 못했습니다.");
+      setPhotoSubmitting(false);
       return;
     }
 
@@ -87,7 +91,7 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
   async function handleManualMenuSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!authenticated) {
+    if (!authenticated || menuSubmitting) {
       return;
     }
 
@@ -102,6 +106,7 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
 
     setNameError("");
     setMenuSubmitError("");
+    setMenuSubmitting(true);
 
     const response = await fetch(`/api/restaurants/${restaurantId}/menu-items`, {
       method: "POST",
@@ -117,6 +122,7 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
 
     if (!response.ok) {
       setMenuSubmitError(data.error ?? "메뉴를 저장하지 못했습니다.");
+      setMenuSubmitting(false);
       return;
     }
 
@@ -147,6 +153,7 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
                 name="menuPhoto"
                 accept="image/*,.heic,.heif,image/heic,image/heif"
                 onFile={handleImageFile}
+                cropMenuPhoto
               />
             </Field>
             {converting ? (
@@ -165,8 +172,8 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
             <Field label="촬영일" required>
               <DateSelectInput name="takenAt" defaultValue={todayDateValue()} />
             </Field>
-            <SubmitButton disabled={converting}>
-              {converting ? "변환 중..." : "메뉴 사진 추가"}
+            <SubmitButton disabled={converting || photoSubmitting}>
+              {photoSubmitting ? "저장 중..." : converting ? "변환 중..." : "메뉴 사진 추가"}
             </SubmitButton>
             {photoSubmitError ? (
               <p className="text-sm text-red-700">{photoSubmitError}</p>
@@ -190,7 +197,9 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
             <Field label="가격">
               <TextInput name="price" inputMode="numeric" placeholder="가격" />
             </Field>
-            <SubmitButton>직접 메뉴 추가</SubmitButton>
+            <SubmitButton disabled={menuSubmitting}>
+              {menuSubmitting ? "저장 중..." : "직접 메뉴 추가"}
+            </SubmitButton>
             {menuSubmitError ? (
               <p className="text-sm text-red-700">{menuSubmitError}</p>
             ) : null}

@@ -14,13 +14,21 @@ export function KakaoMap({
   restaurants,
   heightClassName = "h-[62vh] min-h-80",
   showRestaurantList = true,
+  defaultToCurrentLocation = false,
+  level = 5,
 }: {
   restaurants: RestaurantRow[];
   heightClassName?: string;
   showRestaurantList?: boolean;
+  defaultToCurrentLocation?: boolean;
+  level?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [currentLocation, setCurrentLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const mappedRestaurants = useMemo(
     () =>
@@ -33,7 +41,30 @@ export function KakaoMap({
   );
 
   useEffect(() => {
-    if (!appKey || mappedRestaurants.length === 0 || !containerRef.current) {
+    if (!defaultToCurrentLocation || !navigator.geolocation) {
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      () => {
+        setCurrentLocation(null);
+      },
+      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 5_000 },
+    );
+  }, [defaultToCurrentLocation]);
+
+  useEffect(() => {
+    if (
+      !appKey ||
+      (!defaultToCurrentLocation && mappedRestaurants.length === 0) ||
+      !containerRef.current
+    ) {
       return;
     }
 
@@ -62,12 +93,22 @@ export function KakaoMap({
         }
 
         const firstRestaurant = mappedRestaurants[0];
+        const center = currentLocation ??
+          (firstRestaurant
+            ? {
+                latitude: firstRestaurant.latitude,
+                longitude: firstRestaurant.longitude,
+              }
+            : {
+                latitude: 37.566826,
+                longitude: 126.9786567,
+              });
         const map = new window.kakao.maps.Map(containerRef.current, {
           center: new window.kakao.maps.LatLng(
-            firstRestaurant.latitude,
-            firstRestaurant.longitude,
+            center.latitude,
+            center.longitude,
           ),
-          level: 5,
+          level,
         });
 
         for (const restaurant of mappedRestaurants) {
@@ -96,7 +137,7 @@ export function KakaoMap({
     return () => {
       cancelled = true;
     };
-  }, [appKey, mappedRestaurants]);
+  }, [appKey, currentLocation, defaultToCurrentLocation, level, mappedRestaurants]);
 
   if (!appKey) {
     return (
@@ -107,7 +148,7 @@ export function KakaoMap({
     );
   }
 
-  if (mappedRestaurants.length === 0) {
+  if (mappedRestaurants.length === 0 && !defaultToCurrentLocation) {
     return (
       <MapNotice
         title="지도에 표시할 식당이 없습니다."

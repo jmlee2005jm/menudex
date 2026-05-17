@@ -27,7 +27,7 @@ export async function GET() {
         .order("updated_at", { ascending: false }),
       supabase
         .from("visits")
-        .select("restaurant_id, visited_at")
+        .select("restaurant_id, visited_at, created_at")
         .eq("user_id", ownerId)
         .eq("profile_id", auth.session.profileId),
       supabase
@@ -38,7 +38,7 @@ export async function GET() {
       supabase
         .from("visits")
         .select(
-          "id, restaurant_id, profile_id, visited_at, created_at, meal_type, profiles(display_name), visit_photos(*), visit_menu_items(manual_menu_name, rating, menu_items(name))",
+          "id, restaurant_id, profile_id, visited_at, created_at, meal_type, profiles(display_name), visit_photos(*), visit_menu_items(id, manual_menu_name, rating, menu_items(name))",
         )
         .eq("user_id", ownerId)
         .eq("profile_id", auth.session.profileId)
@@ -48,7 +48,7 @@ export async function GET() {
       supabase
         .from("visits")
         .select(
-          "id, restaurant_id, profile_id, visited_at, created_at, meal_type, profiles(display_name), visit_photos(*), visit_menu_items(manual_menu_name, rating, menu_items(name))",
+          "id, restaurant_id, profile_id, visited_at, created_at, meal_type, profiles(display_name), visit_photos(*), visit_menu_items(id, manual_menu_name, rating, menu_items(name))",
         )
         .eq("user_id", ownerId)
         .order("visited_at", { ascending: false })
@@ -164,7 +164,49 @@ export async function POST(request: Request) {
     );
   }
 
+  await createInitialMenuData({
+    supabase,
+    restaurantId: data.id,
+    ownerId: auth.session.ownerId,
+    profileId: auth.session.profileId,
+    form,
+  });
+
   return NextResponse.json({ id: data.id }, { status: 201 });
+}
+
+async function createInitialMenuData({
+  supabase,
+  restaurantId,
+  ownerId,
+  profileId,
+  form,
+}: {
+  supabase: ReturnType<typeof createAdminClient>;
+  restaurantId: string;
+  ownerId: string;
+  profileId: string;
+  form: FormData;
+}) {
+  const menuPhoto = form.get("initialMenuPhoto");
+
+  if (menuPhoto instanceof File && menuPhoto.size > 0) {
+    const extension = menuPhoto.name.split(".").pop() || "jpg";
+    const storagePath = `${ownerId}/${restaurantId}/${crypto.randomUUID()}.${extension}`;
+    const upload = await supabase.storage.from("menu-photos").upload(storagePath, menuPhoto, {
+      upsert: false,
+      contentType: menuPhoto.type || undefined,
+    });
+
+    if (!upload.error) {
+      await supabase.from("menu_photos").insert({
+        restaurant_id: restaurantId,
+        owner_profile_id: profileId,
+        storage_path: storagePath,
+        taken_at: String(form.get("initialMenuTakenAt") ?? "").trim() || null,
+      });
+    }
+  }
 }
 
 async function uploadRestaurantIcon(

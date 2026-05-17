@@ -97,6 +97,7 @@ export type VisitMenuItemRow = {
 export type VisitPhotoRow = {
   id: string;
   visit_id: string;
+  visit_menu_item_id: string | null;
   profile_id: string;
   storage_path: string;
   signedUrl?: string;

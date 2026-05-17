@@ -8,6 +8,7 @@ import {
   SetupRequired,
 } from "@/components/app-state";
 import { PageShell, SecondaryLink } from "@/components/page-shell";
+import { PhotoLightbox } from "@/components/photo-lightbox";
 import { RatingDisplay } from "@/components/rating-field";
 import { getCachedJson } from "@/lib/client-cache";
 import { useAppSession } from "@/lib/use-app-session";
@@ -24,8 +25,9 @@ type RecentVisit = {
     name: string | null;
     branch_name: string | null;
   }> | null;
-  visit_photos?: Array<{ signedUrl?: string }>;
+  visit_photos?: Array<{ visit_menu_item_id?: string | null; signedUrl?: string }>;
   visit_menu_items?: Array<{
+    id: string;
     manual_menu_name: string | null;
     rating: number | null;
     review: string | null;
@@ -51,6 +53,7 @@ export default function VisitsPage() {
   const [visits, setVisits] = useState<RecentVisit[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState("");
+  const [lightboxPhotoUrl, setLightboxPhotoUrl] = useState("");
 
   useEffect(() => {
     if (!authenticated) {
@@ -128,15 +131,17 @@ export default function VisitsPage() {
           {dataLoading ? <LoadingState /> : null}
           {dataError ? <p className="text-sm text-red-700">{dataError}</p> : null}
           {visits.map((visit) => (
-            <Link
+            <div
               key={visit.id}
-              href={`/restaurants/${visit.restaurant_id}`}
-              className="block border border-line bg-white/75 p-4"
+              className="border border-line bg-white/75 p-4"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="break-words text-lg font-semibold">
+                <Link
+                  href={`/restaurants/${visit.restaurant_id}`}
+                  className="break-words text-lg font-semibold"
+                >
                   {restaurantLabel(visit)}
-                </h2>
+                </Link>
                 <p className="text-sm text-ink/55">
                   {visit.visited_at.slice(0, 10)} · {mealLabels[visit.meal_type]}
                   {" · "}
@@ -147,34 +152,51 @@ export default function VisitsPage() {
                 {(visit.visit_menu_items ?? []).map((item, index) => (
                   <div
                     key={`${visit.id}-${index}`}
-                    className="grid gap-1 border-t border-line pt-2 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                    className="grid gap-2 border-t border-line pt-2 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{menuName(item)}</p>
-                      {item.review ? (
-                        <p className="mt-1 break-words text-sm text-ink/65">
-                          {item.review}
-                        </p>
+                    <div className="flex min-w-0 items-start gap-2">
+                      {visitPhotoUrlForMenu(visit, item.id) ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLightboxPhotoUrl(visitPhotoUrlForMenu(visit, item.id) ?? "")
+                          }
+                          className="shrink-0"
+                          aria-label="방문 사진 크게 보기"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={visitPhotoUrlForMenu(visit, item.id)}
+                            alt=""
+                            className="h-14 w-14 border border-line bg-white object-cover"
+                          />
+                        </button>
                       ) : null}
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{menuName(item)}</p>
+                        {item.review ? (
+                          <p className="mt-1 break-words text-sm text-ink/65">
+                            {item.review}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                     <RatingDisplay value={item.rating} />
                   </div>
                 ))}
               </div>
-              {visitPhotoUrl(visit) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={visitPhotoUrl(visit)}
-                  alt=""
-                  className="mt-3 h-14 w-14 border border-line bg-white object-cover"
-                />
-              ) : null}
-            </Link>
+            </div>
           ))}
           {!dataLoading && visits.length === 0 ? (
             <p className="border border-dashed border-line bg-white/50 p-4 text-ink/65">
               아직 방문 기록이 없습니다.
             </p>
+          ) : null}
+          {lightboxPhotoUrl ? (
+            <PhotoLightbox
+              imageUrl={lightboxPhotoUrl}
+              onClose={() => setLightboxPhotoUrl("")}
+            />
           ) : null}
         </div>
       ) : null}
@@ -204,6 +226,16 @@ function menuName(item: NonNullable<RecentVisit["visit_menu_items"]>[number]) {
   return item.manual_menu_name ?? linkedMenuName ?? "메뉴";
 }
 
-function visitPhotoUrl(visit: RecentVisit) {
-  return visit.visit_photos?.find((photo) => photo.signedUrl)?.signedUrl;
+function visitPhotoUrlForMenu(visit: RecentVisit, visitMenuItemId: string) {
+  return visit.visit_photos?.find((photo) => {
+    if (photo.visit_menu_item_id === visitMenuItemId) {
+      return Boolean(photo.signedUrl);
+    }
+
+    return (
+      !photo.visit_menu_item_id &&
+      (visit.visit_menu_items ?? []).length === 1 &&
+      Boolean(photo.signedUrl)
+    );
+  })?.signedUrl;
 }

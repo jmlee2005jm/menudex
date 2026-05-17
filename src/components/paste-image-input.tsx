@@ -4,11 +4,23 @@ import {
   ClipboardEvent,
   ChangeEvent,
   PointerEvent,
+  useEffect,
   useRef,
   useState,
 } from "react";
+import {
+  constrainOffset,
+  cropScannedRectangle,
+  cropVisibleImage,
+  getRenderedImageBounds,
+  getRenderedImageSize,
+  type ScanCorners,
+} from "@/lib/image-crop";
 
-const cropViewportSize = 192;
+const cropViewportSizes = {
+  square: { width: 192, height: 192, outputWidth: 512, outputHeight: 512 },
+  menu: { width: 320, height: 220, outputWidth: 1200, outputHeight: 825 },
+};
 
 export function PasteImageInput({
   name,
@@ -18,6 +30,7 @@ export function PasteImageInput({
   preview = false,
   currentPreviewUrl,
   cropSquare = false,
+  cropMenuPhoto = false,
 }: {
   name: string;
   onFile?: (file: File) => void;
@@ -26,12 +39,22 @@ export function PasteImageInput({
   preview?: boolean;
   currentPreviewUrl?: string;
   cropSquare?: boolean;
+  cropMenuPhoto?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const cropImageRef = useRef<HTMLImageElement | null>(null);
   const [fileName, setFileName] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [processing, setProcessing] = useState(false);
+  const previewUrlRef = useRef("");
+  const originalCropSourceRef = useRef<{
+    file: File;
+    url: string;
+  } | null>(null);
+  const [originalCropSource, setOriginalCropSource] = useState<{
+    file: File;
+    url: string;
+  } | null>(null);
   const [cropSource, setCropSource] = useState<{ file: File; url: string } | null>(null);
   const [cropZoom, setCropZoom] = useState(1);
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
@@ -44,6 +67,29 @@ export function PasteImageInput({
     offsetX: number;
     offsetY: number;
   } | null>(null);
+  const [cornerDrag, setCornerDrag] = useState<keyof ScanCorners | null>(null);
+  const [scanCorners, setScanCorners] = useState<ScanCorners | null>(null);
+
+  useEffect(() => {
+    previewUrlRef.current = previewUrl;
+  }, [previewUrl]);
+
+  useEffect(() => {
+    originalCropSourceRef.current = originalCropSource;
+  }, [originalCropSource]);
+
+  useEffect(
+    () => () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+
+      if (originalCropSourceRef.current) {
+        URL.revokeObjectURL(originalCropSourceRef.current.url);
+      }
+    },
+    [],
+  );
 
   async function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -71,18 +117,28 @@ export function PasteImageInput({
   }
 
   async function acceptFile(file: File) {
-    if (cropSquare) {
-      setCropSource((current) => {
+    if (cropSquare || cropMenuPhoto) {
+      const next = { file, url: URL.createObjectURL(file) };
+      setOriginalCropSource((current) => {
         if (current) {
           URL.revokeObjectURL(current.url);
         }
 
-        return { file, url: URL.createObjectURL(file) };
+        return next;
       });
+      setCropSource(next);
       setCropZoom(1);
       setCropOffset({ x: 0, y: 0 });
       setNaturalSize(null);
+      setScanCorners(null);
       setFileName("");
+      setPreviewUrl((current) => {
+        if (current) {
+          URL.revokeObjectURL(current);
+        }
+
+        return "";
+      });
       return;
     }
 
@@ -114,26 +170,53 @@ export function PasteImageInput({
     }
 
     setProcessing(true);
-    const croppedFile = await cropVisibleSquare(
-      cropSource.file,
-      cropImageRef.current,
-      cropZoom,
-      cropOffset,
-    );
+    const croppedFile =
+      cropMenuPhoto && scanCorners && naturalSize
+        ? await cropScannedRectangle(
+            cropSource.file,
+            cropImageRef.current,
+            scanCorners,
+            getRenderedImageBounds(naturalSize, cropViewportSizes.menu, 1, "contain", {
+              x: 0,
+              y: 0,
+            }),
+          )
+        : await cropVisibleImage(
+            cropSource.file,
+            cropImageRef.current,
+            cropZoom,
+            cropOffset,
+            cropSquare ? cropViewportSizes.square : cropViewportSizes.menu,
+            cropSquare ? "cover" : "contain",
+          );
     commitFile(croppedFile);
-    URL.revokeObjectURL(cropSource.url);
     setCropSource(null);
     setNaturalSize(null);
+    setScanCorners(null);
     setProcessing(false);
   }
 
   function cancelCrop() {
-    if (cropSource) {
-      URL.revokeObjectURL(cropSource.url);
+    if (!fileName && originalCropSource) {
+      URL.revokeObjectURL(originalCropSource.url);
+      setOriginalCropSource(null);
     }
 
     setCropSource(null);
     setNaturalSize(null);
+    setScanCorners(null);
+  }
+
+  function reopenCrop() {
+    if (!originalCropSource) {
+      return;
+    }
+
+    setCropSource(originalCropSource);
+    setCropZoom(1);
+    setCropOffset({ x: 0, y: 0 });
+    setNaturalSize(null);
+    setScanCorners(null);
   }
 
   function startDrag(event: PointerEvent<HTMLDivElement>) {
@@ -161,13 +244,46 @@ export function PasteImageInput({
         },
         cropZoom,
         naturalSize,
+        cropSquare ? cropViewportSizes.square : cropViewportSizes.menu,
+        cropSquare ? "cover" : "contain",
       ),
     );
   }
 
+  function startCornerDrag(event: PointerEvent<HTMLButtonElement>, corner: keyof ScanCorners) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setCornerDrag(corner);
+  }
+
+  function dragScanCorner(event: PointerEvent<HTMLDivElement>) {
+    if (!cornerDrag || !scanCorners) {
+      return;
+    }
+
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const nextPoint = {
+      x: Math.min(cropViewportSizes.menu.width, Math.max(0, event.clientX - rect.left)),
+      y: Math.min(cropViewportSizes.menu.height, Math.max(0, event.clientY - rect.top)),
+    };
+
+    setScanCorners((current) =>
+      current ? { ...current, [cornerDrag]: nextPoint } : current,
+    );
+  }
+
   const renderedImageSize = naturalSize
-    ? getRenderedImageSize(naturalSize, cropZoom)
+    ? getRenderedImageSize(
+        naturalSize,
+        cropZoom,
+        cropSquare ? cropViewportSizes.square : cropViewportSizes.menu,
+        cropSquare ? "cover" : "contain",
+      )
     : null;
+  const cropViewport = cropSquare ? cropViewportSizes.square : cropViewportSizes.menu;
+  const useScanCrop = cropMenuPhoto && cropSource;
 
   return (
     <div
@@ -198,28 +314,55 @@ export function PasteImageInput({
       <p className="text-sm text-ink/55">
         파일을 선택하거나 이미지를 붙여넣기 하세요.
       </p>
-      {processing ? <p className="text-sm text-ink/60">아이콘 크기로 자르는 중...</p> : null}
+      {processing ? <p className="text-sm text-ink/60">사진을 자르는 중...</p> : null}
       {cropSource ? (
         <div className="grid gap-3">
           <div
-            className="relative h-48 w-48 touch-none overflow-hidden border border-line bg-paper"
-            onPointerDown={startDrag}
-            onPointerMove={dragCrop}
-            onPointerUp={() => setDragStart(null)}
-            onPointerCancel={() => setDragStart(null)}
+            className="relative touch-none overflow-hidden border border-line bg-paper"
+            onPointerDown={useScanCrop ? undefined : startDrag}
+            onPointerMove={useScanCrop ? dragScanCorner : dragCrop}
+            onPointerUp={() => {
+              setDragStart(null);
+              setCornerDrag(null);
+            }}
+            onPointerCancel={() => {
+              setDragStart(null);
+              setCornerDrag(null);
+            }}
+            style={{ width: cropViewport.width, height: cropViewport.height }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               ref={cropImageRef}
               src={cropSource.url}
-              alt="아이콘 자르기"
+              alt={cropMenuPhoto ? "메뉴 사진 자르기" : "아이콘 자르기"}
               className="absolute left-1/2 top-1/2 max-w-none select-none"
               draggable={false}
               onLoad={(event) => {
-                setNaturalSize({
+                const nextNaturalSize = {
                   width: event.currentTarget.naturalWidth,
                   height: event.currentTarget.naturalHeight,
-                });
+                };
+                setNaturalSize(nextNaturalSize);
+
+                if (cropMenuPhoto) {
+                  const bounds = getRenderedImageBounds(
+                    nextNaturalSize,
+                    cropViewportSizes.menu,
+                    1,
+                    "contain",
+                    { x: 0, y: 0 },
+                  );
+                  setScanCorners({
+                    topLeft: { x: bounds.left, y: bounds.top },
+                    topRight: { x: bounds.left + bounds.width, y: bounds.top },
+                    bottomRight: {
+                      x: bounds.left + bounds.width,
+                      y: bounds.top + bounds.height,
+                    },
+                    bottomLeft: { x: bounds.left, y: bounds.top + bounds.height },
+                  });
+                }
               }}
               style={{
                 width: renderedImageSize ? `${renderedImageSize.width}px` : "100%",
@@ -227,22 +370,71 @@ export function PasteImageInput({
                 transform: `translate(calc(-50% + ${cropOffset.x}px), calc(-50% + ${cropOffset.y}px))`,
               }}
             />
+            {useScanCrop && scanCorners ? (
+              <>
+                <svg className="pointer-events-none absolute inset-0 h-full w-full">
+                  <polygon
+                    points={[
+                      scanCorners.topLeft,
+                      scanCorners.topRight,
+                      scanCorners.bottomRight,
+                      scanCorners.bottomLeft,
+                    ]
+                      .map((point) => `${point.x},${point.y}`)
+                      .join(" ")}
+                    fill="rgba(250, 204, 21, 0.16)"
+                    stroke="rgb(234, 179, 8)"
+                    strokeWidth="2"
+                  />
+                </svg>
+                {Object.entries(scanCorners).map(([corner, point]) => (
+                  <button
+                    key={corner}
+                    type="button"
+                    aria-label="자르기 꼭짓점"
+                    onPointerDown={(event) =>
+                      startCornerDrag(event, corner as keyof ScanCorners)
+                    }
+                    className="absolute h-7 w-7 rounded-full border-2 border-yellow-500 bg-white shadow"
+                    style={{
+                      left: point.x,
+                      top: point.y,
+                      transform: "translate(-50%, -50%)",
+                    }}
+                  />
+                ))}
+              </>
+            ) : null}
           </div>
-          <label className="grid gap-1 text-sm text-ink/65">
-            확대
-            <input
-              type="range"
-              min="1"
-              max="3"
-              step="0.05"
-              value={cropZoom}
-              onChange={(event) => {
-                const nextZoom = Number(event.target.value);
-                setCropZoom(nextZoom);
-                setCropOffset((current) => constrainOffset(current, nextZoom, naturalSize));
-              }}
-            />
-          </label>
+          {useScanCrop ? (
+            <p className="text-sm text-ink/60">
+              네 모서리를 메뉴판 끝에 맞추면 직사각형으로 보정해서 저장합니다.
+            </p>
+          ) : (
+            <label className="grid gap-1 text-sm text-ink/65">
+              확대
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.05"
+                value={cropZoom}
+                onChange={(event) => {
+                  const nextZoom = Number(event.target.value);
+                  setCropZoom(nextZoom);
+                  setCropOffset((current) =>
+                    constrainOffset(
+                      current,
+                      nextZoom,
+                      naturalSize,
+                      cropViewport,
+                      cropSquare ? "cover" : "contain",
+                    ),
+                  );
+                }}
+              />
+            </label>
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -270,91 +462,20 @@ export function PasteImageInput({
           className="h-20 w-20 border border-line bg-white object-contain"
         />
       ) : null}
-      {fileName ? <p className="text-sm text-ink/70">선택됨: {fileName}</p> : null}
+      {fileName ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm text-ink/70">선택됨: {fileName}</p>
+          {originalCropSource ? (
+            <button
+              type="button"
+              onClick={reopenCrop}
+              className="min-h-9 border border-line bg-white px-2 text-sm font-medium text-ink"
+            >
+              다시 자르기
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
-}
-
-async function cropVisibleSquare(
-  file: File,
-  image: HTMLImageElement,
-  zoom: number,
-  offset: { x: number; y: number },
-) {
-  const naturalWidth = image.naturalWidth;
-  const naturalHeight = image.naturalHeight;
-  const scale = Math.max(cropViewportSize / naturalWidth, cropViewportSize / naturalHeight) * zoom;
-  const renderedWidth = naturalWidth * scale;
-  const renderedHeight = naturalHeight * scale;
-  const renderedLeft = (cropViewportSize - renderedWidth) / 2 + offset.x;
-  const renderedTop = (cropViewportSize - renderedHeight) / 2 + offset.y;
-  const sourceX = clampSource(-renderedLeft / scale, 0, naturalWidth);
-  const sourceY = clampSource(-renderedTop / scale, 0, naturalHeight);
-  const sourceSize = Math.min(
-    cropViewportSize / scale,
-    naturalWidth - sourceX,
-    naturalHeight - sourceY,
-  );
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    return file;
-  }
-
-  context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, 512, 512);
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/png", 0.92),
-  );
-
-  if (!blob) {
-    return file;
-  }
-
-  return new File([blob], replaceExtension(file.name, "png"), { type: "image/png" });
-}
-
-function clampSource(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function replaceExtension(name: string, extension: string) {
-  return name.includes(".")
-    ? name.replace(/\.[^.]+$/, `.${extension}`)
-    : `${name}.${extension}`;
-}
-
-function getRenderedImageSize(
-  naturalSize: { width: number; height: number },
-  zoom: number,
-) {
-  const scale =
-    Math.max(cropViewportSize / naturalSize.width, cropViewportSize / naturalSize.height) *
-    zoom;
-
-  return {
-    width: naturalSize.width * scale,
-    height: naturalSize.height * scale,
-  };
-}
-
-function constrainOffset(
-  offset: { x: number; y: number },
-  zoom: number,
-  naturalSize: { width: number; height: number } | null,
-) {
-  if (!naturalSize) {
-    return offset;
-  }
-
-  const rendered = getRenderedImageSize(naturalSize, zoom);
-  const maxX = Math.max(0, (rendered.width - cropViewportSize) / 2);
-  const maxY = Math.max(0, (rendered.height - cropViewportSize) / 2);
-
-  return {
-    x: Math.min(maxX, Math.max(-maxX, offset.x)),
-    y: Math.min(maxY, Math.max(-maxY, offset.y)),
-  };
 }

@@ -15,17 +15,16 @@ export async function POST(
 
   const { restaurantId } = await context.params;
   const form = await request.formData();
-  const menuName = String(form.get("menuName") ?? "").trim();
-  const rating = String(form.get("rating") ?? "").trim();
+  const menuEntries = parseVisitMenuEntries(form);
 
-  if (!menuName) {
+  if (menuEntries.length === 0) {
     return NextResponse.json(
       { error: "먹은 메뉴를 입력하세요." },
       { status: 400 },
     );
   }
 
-  if (!rating) {
+  if (menuEntries.some((entry) => !entry.rating)) {
     return NextResponse.json(
       { error: "별점을 선택하세요." },
       { status: 400 },
@@ -62,37 +61,97 @@ export async function POST(
     );
   }
 
-  const { error: itemError } = await supabase.from("visit_menu_items").insert({
-    visit_id: visit.id,
-    manual_menu_name: menuName,
-    rating: Number(rating),
-    review: String(form.get("review") ?? "").trim() || null,
-  });
+  const { data: visitMenuItems, error: itemError } = await supabase
+    .from("visit_menu_items")
+    .insert(
+      menuEntries.map((entry) => ({
+        visit_id: visit.id,
+        manual_menu_name: entry.menuName,
+        rating: Number(entry.rating),
+        review: entry.review || null,
+      })),
+    )
+    .select("id");
 
-  if (itemError) {
-    return NextResponse.json({ error: itemError.message }, { status: 500 });
+  if (itemError || !visitMenuItems) {
+    await supabase.from("visits").delete().eq("id", visit.id);
+
+    return NextResponse.json(
+      { error: itemError?.message ?? "먹은 메뉴를 저장하지 못했습니다." },
+      { status: 500 },
+    );
   }
 
-  const photoStoragePath = await uploadVisitPhoto(
-    supabase,
-    auth.session.profileId,
-    form.get("visitPhoto"),
-  );
+  const photoRows: Array<{
+    visit_id: string;
+    visit_menu_item_id: string;
+    profile_id: string;
+    storage_path: string;
+  }> = [];
 
-  if (photoStoragePath) {
-    const { error: photoError } = await supabase.from("visit_photos").insert({
-      visit_id: visit.id,
-      profile_id: auth.session.profileId,
-      storage_path: photoStoragePath,
-    });
+  try {
+    for (const [index, entry] of menuEntries.entries()) {
+      const visitMenuItem = visitMenuItems[index];
+
+      if (!visitMenuItem) {
+        continue;
+      }
+
+      const photoStoragePaths = await uploadVisitPhotos(
+        supabase,
+        auth.session.profileId,
+        form.getAll(`visitPhoto:${entry.rowId}`),
+      );
+
+      photoRows.push(
+        ...photoStoragePaths.map((storagePath) => ({
+          visit_id: visit.id,
+          visit_menu_item_id: visitMenuItem.id,
+          profile_id: auth.session.profileId,
+          storage_path: storagePath,
+        })),
+      );
+    }
+  } catch (error) {
+    await cleanupFailedVisit(supabase, visit.id, photoRows.map((photo) => photo.storage_path));
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "방문 사진을 업로드하지 못했습니다.",
+      },
+      { status: 500 },
+    );
+  }
+
+  if (photoRows.length > 0) {
+    const { error: photoError } = await supabase.from("visit_photos").insert(photoRows);
 
     if (photoError) {
-      await supabase.storage.from("menu-photos").remove([photoStoragePath]);
+      await cleanupFailedVisit(supabase, visit.id, photoRows.map((photo) => photo.storage_path));
       return NextResponse.json({ error: photoError.message }, { status: 500 });
     }
   }
 
   return NextResponse.json({ ok: true }, { status: 201 });
+}
+
+function parseVisitMenuEntries(form: FormData) {
+  const rowIds = form.getAll("menuRowId").map((value) => String(value).trim());
+  const menuNames = form.getAll("menuName").map((value) => String(value).trim());
+  const ratings = form.getAll("rating").map((value) => String(value).trim());
+  const reviews = form.getAll("review").map((value) => String(value).trim());
+
+  return menuNames
+    .map((menuName, index) => ({
+      rowId: rowIds[index] || String(index),
+      menuName,
+      rating: ratings[index] ?? "",
+      review: reviews[index] ?? "",
+    }))
+    .filter((entry) => entry.menuName);
 }
 
 export async function DELETE(
@@ -248,6 +307,7 @@ export async function PATCH(
     .from("visit_photos")
     .select("id, storage_path")
     .eq("visit_id", visitId)
+    .eq("visit_menu_item_id", visitMenuItemId)
     .eq("profile_id", auth.session.profileId);
 
   if (existingPhotos.error) {
@@ -269,6 +329,7 @@ export async function PATCH(
         .from("visit_photos")
         .delete()
         .eq("visit_id", visitId)
+        .eq("visit_menu_item_id", visitMenuItemId)
         .eq("profile_id", auth.session.profileId);
 
       if (deletePhotoRows.error) {
@@ -287,6 +348,7 @@ export async function PATCH(
   if (newPhotoStoragePath) {
     const insertPhoto = await supabase.from("visit_photos").insert({
       visit_id: visitId,
+      visit_menu_item_id: visitMenuItemId,
       profile_id: auth.session.profileId,
       storage_path: newPhotoStoragePath,
     });
@@ -321,4 +383,42 @@ async function uploadVisitPhoto(
   }
 
   return path;
+}
+
+async function uploadVisitPhotos(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  values: FormDataEntryValue[],
+) {
+  const paths: string[] = [];
+
+  try {
+    for (const value of values) {
+      const path = await uploadVisitPhoto(supabase, profileId, value);
+
+      if (path) {
+        paths.push(path);
+      }
+    }
+  } catch (error) {
+    if (paths.length > 0) {
+      await supabase.storage.from("menu-photos").remove(paths);
+    }
+
+    throw error;
+  }
+
+  return paths;
+}
+
+async function cleanupFailedVisit(
+  supabase: ReturnType<typeof createAdminClient>,
+  visitId: string,
+  storagePaths: string[],
+) {
+  if (storagePaths.length > 0) {
+    await supabase.storage.from("menu-photos").remove(storagePaths);
+  }
+
+  await supabase.from("visits").delete().eq("id", visitId);
 }

@@ -14,6 +14,7 @@ import { MenuPhotoCard } from "@/components/menu-photo-annotator";
 import { formatMultiValue } from "@/components/multi-select-field";
 import { PageShell, PrimaryLink, SecondaryLink } from "@/components/page-shell";
 import { PasteImageInput } from "@/components/paste-image-input";
+import { PhotoLightbox } from "@/components/photo-lightbox";
 import { RatingDisplay, RatingField } from "@/components/rating-field";
 import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
 import type {
@@ -78,11 +79,9 @@ function RestaurantLocationCard({
 function RestaurantHeaderBody({
   restaurant,
   restaurantId,
-  deleteRestaurant,
 }: {
   restaurant: RestaurantRow;
   restaurantId: string;
-  deleteRestaurant: () => void;
 }) {
   return (
     <div className="grid gap-5">
@@ -115,10 +114,10 @@ function RestaurantHeaderBody({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
+      <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
         <Link
           href={`/restaurants/${restaurantId}/visits/new`}
-          className="inline-flex min-h-12 items-center justify-center bg-leaf px-5 text-sm font-semibold text-white sm:order-none"
+          className="col-span-2 inline-flex min-h-12 items-center justify-center bg-leaf px-5 text-sm font-semibold text-white sm:col-span-1 sm:order-none"
         >
           방문 기록 추가
         </Link>
@@ -128,13 +127,6 @@ function RestaurantHeaderBody({
         <PrimaryLink href={`/restaurants/${restaurantId}/edit`}>
           식당 수정
         </PrimaryLink>
-        <button
-          type="button"
-          onClick={deleteRestaurant}
-          className="inline-flex min-h-11 items-center justify-center border border-red-200 bg-white px-4 text-sm font-medium text-red-700"
-        >
-          식당 삭제
-        </button>
       </div>
 
     </div>
@@ -153,7 +145,9 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
   const [editingReviewId, setEditingReviewId] = useState("");
   const [editingRating, setEditingRating] = useState("");
   const [editError, setEditError] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
   const [visitScope, setVisitScope] = useState<"mine" | "all">("mine");
+  const [lightboxPhotoUrl, setLightboxPhotoUrl] = useState("");
 
   useEffect(() => {
     if (!authenticated) {
@@ -210,7 +204,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
           review: item.review,
           profileId: visit.profile_id,
           profileName: visit.profiles?.display_name ?? "프로필",
-          photoUrl: visit.visit_photos?.find((photo) => photo.signedUrl)?.signedUrl,
+          photoUrls: photosForVisitMenuItem(visit, item.id),
         })),
       ),
     [visits],
@@ -305,6 +299,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
     setEditingReviewId("");
     setEditingRating("");
     setEditError("");
+    setEditSubmitting(false);
   }
 
   async function editReview(
@@ -312,6 +307,10 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
     visit: (typeof visitCards)[number],
   ) {
     event.preventDefault();
+    if (editSubmitting) {
+      return;
+    }
+
     const form = new FormData(event.currentTarget);
     const menuName = String(form.get("menuName") ?? "").trim();
     const rating = String(form.get("rating") ?? "").trim();
@@ -327,6 +326,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
     }
 
     setEditError("");
+    setEditSubmitting(true);
     form.set("visitId", visit.visitId);
     form.set("visitMenuItemId", visit.visitMenuItemId);
     form.set("menuName", menuName);
@@ -341,6 +341,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
 
     if (!response.ok) {
       setEditError(data.error ?? "방문 기록을 수정하지 못했습니다.");
+      setEditSubmitting(false);
       return;
     }
 
@@ -355,7 +356,11 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
 
         return {
           ...currentVisit,
-          visit_photos: updateLocalVisitPhotos(currentVisit.visit_photos, form),
+          visit_photos: updateLocalVisitPhotos(
+            currentVisit.visit_photos,
+            form,
+            visit.visitMenuItemId,
+          ),
           visit_menu_items: currentVisit.visit_menu_items.map((item) =>
             item.id === visit.visitMenuItemId
               ? {
@@ -372,14 +377,23 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
     cancelEditingReview();
   }
 
-  function updateLocalVisitPhotos(photos: VisitWithMenu["visit_photos"], form: FormData) {
+  function updateLocalVisitPhotos(
+    photos: VisitWithMenu["visit_photos"],
+    form: FormData,
+    visitMenuItemId: string,
+  ) {
     const newPhoto = form.get("visitPhoto");
+    const otherPhotos = (photos ?? []).filter(
+      (photo) => photo.visit_menu_item_id !== visitMenuItemId,
+    );
 
     if (newPhoto instanceof File && newPhoto.size > 0) {
       return [
+        ...otherPhotos,
         {
           id: "local-preview",
           visit_id: "",
+          visit_menu_item_id: visitMenuItemId,
           profile_id: "",
           storage_path: "",
           signedUrl: URL.createObjectURL(newPhoto),
@@ -389,7 +403,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
     }
 
     if (form.get("deleteVisitPhoto") === "true") {
-      return [];
+      return otherPhotos;
     }
 
     return photos;
@@ -432,6 +446,17 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
       eyebrow="식당"
       title={restaurant?.name ?? "식당 불러오는 중"}
       action={<SecondaryLink href="/restaurants">전체 식당</SecondaryLink>}
+      titleAction={
+        restaurant ? (
+          <button
+            type="button"
+            onClick={deleteRestaurant}
+            className="inline-flex min-h-8 items-center justify-center border border-red-200 bg-white px-2 text-xs font-medium text-red-700"
+          >
+            식당 삭제
+          </button>
+        ) : null
+      }
       titleAside={
         restaurant ? (
           <RestaurantLocationCard restaurant={restaurant} restaurantId={restaurantId} />
@@ -442,7 +467,6 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
           <RestaurantHeaderBody
             restaurant={restaurant}
             restaurantId={restaurantId}
-            deleteRestaurant={deleteRestaurant}
           />
         ) : null
       }
@@ -504,13 +528,13 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                         <Field label="짧은 리뷰">
                           <TextInput name="review" defaultValue={visit.review ?? ""} />
                         </Field>
-                        <Field label="방문 사진">
+                        <Field label="메뉴 사진">
                           <div className="grid gap-2">
-                            {visit.photoUrl ? (
+                            {visit.photoUrls[0] ? (
                               <div className="flex items-center gap-3">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
-                                  src={visit.photoUrl}
+                                  src={visit.photoUrls[0]}
                                   alt=""
                                   className="h-14 w-14 border border-line bg-white object-cover"
                                 />
@@ -534,7 +558,9 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                           </div>
                         </Field>
                         <div className="flex flex-wrap gap-2">
-                          <SubmitButton>수정 저장</SubmitButton>
+                          <SubmitButton disabled={editSubmitting}>
+                            {editSubmitting ? "저장 중..." : "수정 저장"}
+                          </SubmitButton>
                           <button
                             type="button"
                             onClick={cancelEditingReview}
@@ -572,13 +598,24 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                       </div>
                     )}
                   </div>
-                  {editingReviewId !== visit.id && visit.photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={visit.photoUrl}
-                      alt=""
-                      className="h-14 w-14 shrink-0 self-start border border-line bg-white object-cover sm:self-center"
-                    />
+                  {editingReviewId !== visit.id && visit.photoUrls.length > 0 ? (
+                    <div className="flex max-w-44 shrink-0 gap-1 overflow-hidden self-start sm:self-center">
+                      {visit.photoUrls.slice(0, 3).map((photoUrl) => (
+                        <button
+                          key={photoUrl}
+                          type="button"
+                          onClick={() => setLightboxPhotoUrl(photoUrl)}
+                          className="shrink-0"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={photoUrl}
+                            alt=""
+                            className="h-14 w-14 border border-line bg-white object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
                   ) : null}
                   {editingReviewId === visit.id || visit.profileId !== profile?.id ? null : (
                     <div className="flex shrink-0 justify-end gap-2 self-start sm:self-center">
@@ -660,6 +697,27 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
           </section>
         </>
       ) : null}
+      {lightboxPhotoUrl ? (
+        <PhotoLightbox
+          imageUrl={lightboxPhotoUrl}
+          onClose={() => setLightboxPhotoUrl("")}
+        />
+      ) : null}
     </PageShell>
   );
+}
+
+function photosForVisitMenuItem(visit: VisitWithMenu, visitMenuItemId: string) {
+  const photos = visit.visit_photos ?? [];
+  const matchedPhotos = photos.filter(
+    (photo) => photo.visit_menu_item_id === visitMenuItemId,
+  );
+  const legacyPhotos =
+    visit.visit_menu_items.length === 1
+      ? photos.filter((photo) => !photo.visit_menu_item_id)
+      : [];
+
+  return [...matchedPhotos, ...legacyPhotos]
+    .map((photo) => photo.signedUrl)
+    .filter((url): url is string => Boolean(url));
 }

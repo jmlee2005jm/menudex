@@ -15,11 +15,13 @@ export function MenuPhotoAnnotator({
   photo,
   onDeletePhoto,
   currentProfileId,
+  onAnnotationsChange,
 }: {
   restaurantId: string;
   photo: MenuPhotoRow;
   onDeletePhoto: (photoId: string) => void;
   currentProfileId?: string;
+  onAnnotationsChange?: (annotations: MenuAnnotationRow[]) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [annotations, setAnnotations] = useState<MenuAnnotationRow[]>(
@@ -112,7 +114,11 @@ export function MenuPhotoAnnotator({
       return;
     }
 
-    setAnnotations((current) => [...current, data.annotation!]);
+    setAnnotations((current) => {
+      const next = [...current, data.annotation!];
+      onAnnotationsChange?.(next);
+      return next;
+    });
     clearCachedJson(`/api/restaurants/${restaurantId}`);
     setDraft(null);
     setAdding(false);
@@ -147,9 +153,11 @@ export function MenuPhotoAnnotator({
       return;
     }
 
-    setAnnotations((current) =>
-      current.filter((annotation) => annotation.id !== annotationId),
-    );
+    setAnnotations((current) => {
+      const next = current.filter((annotation) => annotation.id !== annotationId);
+      onAnnotationsChange?.(next);
+      return next;
+    });
     clearCachedJson(`/api/restaurants/${restaurantId}`);
   }
 
@@ -285,7 +293,11 @@ export function MenuPhotoCard({
   currentProfileId?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const highlightCount = photo.menu_annotations?.length ?? 0;
+  const [annotations, setAnnotations] = useState<MenuAnnotationRow[]>(
+    photo.menu_annotations ?? [],
+  );
+  const photoWithAnnotations = { ...photo, menu_annotations: annotations };
+  const highlightCount = annotations.length;
 
   if (open) {
     return (
@@ -299,9 +311,10 @@ export function MenuPhotoCard({
         </button>
         <MenuPhotoAnnotator
           restaurantId={restaurantId}
-          photo={photo}
+          photo={photoWithAnnotations}
           onDeletePhoto={onDeletePhoto}
           currentProfileId={currentProfileId}
+          onAnnotationsChange={setAnnotations}
         />
       </div>
     );

@@ -19,27 +19,41 @@ Implemented:
 - Supabase-backed manual menu item creation.
 - Supabase Storage upload for menu photos.
 - HEIC/HEIF menu photos are converted to JPEG in the browser before upload.
+- Menu photo uploads use a scan-style four-corner crop before saving, so angled
+  menu photos can be corrected into a rectangular image.
+- After confirming a crop, the selected image can be reopened for another crop
+  before the form is submitted.
 - Menu photos display at screen width without horizontal overflow.
 - Rectangular semi-transparent highlights can be drawn, confirmed, canceled, and deleted later.
 - Menu photo upload and optional manual menu entry share one `메뉴 추가` screen.
-- Supabase-backed visit logging with meal type, tried menu, half-star rating, and optional short review.
-- Optional visit photos are stored separately from menu photos and displayed as
-  small thumbnails on visit entries.
+- Supabase-backed visit logging with meal type, one or more tried menus,
+  half-star ratings, and optional short reviews.
+- Optional food photos are stored separately from menu photos and attached to
+  individual tried menus inside a visit.
+- New visit logging accepts separate photo inputs per menu row.
+- Saved visit photo thumbnails open a dark-background larger photo viewer.
 - Visit edit supports compact photo replace/delete controls inside the existing
   review edit form.
 - Delete controls for accidental restaurant, menu photo, manual menu, and visit entries.
 - Inline edit controls for saved visit reviews.
 - Restaurant creation/edit supports optional multi-select cuisine categories, food
   types, and manual icon upload.
+- Restaurant creation can optionally add an initial menu photo.
+- Confirm/submit buttons disable while requests are in flight to avoid duplicate
+  saves.
 - Menu photo and restaurant icon inputs support file selection and clipboard
   image paste.
 - Restaurant edit shows the current icon preview when one exists.
+- Restaurant edit can delete the current restaurant icon.
 - Restaurant creation/edit supports Kakao place search and map-click pinning for
   location selection.
 - `/restaurants` shows all coordinate-enabled restaurants on a compact Kakao map.
+- `/restaurants` map defaults to the current location at an approximately
+  neighborhood-level scale before the user interacts with it.
 - Restaurant detail shows that restaurant's location on Kakao Maps when coordinates exist.
 - `/map` provides a larger all-restaurant map view.
-- Restaurant creation/edit supports optional latitude and longitude fields.
+- Restaurant creation/edit stores optional latitude and longitude internally for
+  maps, but the UI does not show raw coordinate values.
 - Restaurants are shared across profiles.
 - Visits/reviews and highlights are profile-scoped.
 - Menu photos are owned by the profile that uploaded them; only that profile can delete them.
@@ -109,6 +123,7 @@ supabase/migrations/0004_profiles.sql
 supabase/migrations/0005_restaurant_menu_goal.sql
 supabase/migrations/0006_visit_photos.sql
 supabase/migrations/0007_restaurant_coordinates.sql
+supabase/migrations/0008_visit_photos_per_menu.sql
 ```
 
 The first migration creates:
@@ -127,9 +142,9 @@ API routes use the service-role key and enforce owner checks in server code.
 The fourth migration creates profiles, seeds the first profile as `JM`, and assigns
 existing visits/photos/highlights to that profile.
 
-The seventh migration adds optional latitude/longitude fields for Kakao Maps.
-Restaurants without coordinates still work normally; they are simply omitted from
-the `/map` marker view.
+The seventh migration adds optional internal latitude/longitude fields for Kakao
+Maps. Restaurants without coordinates still work normally; they are simply
+omitted from the `/map` marker view.
 
 Menu photos are uploaded to paths like:
 
@@ -180,10 +195,17 @@ restart the Next.js dev server.
 - Restaurant name and branch/place are displayed as separate text treatments.
 - Restaurant categories are split into broad cuisine and food/service type.
 - Restaurant icons are manually uploaded by the user; no logo scraping is used.
+- Restaurant icon deletion is supported from the edit screen.
+- Submit buttons should lock immediately after the first press for create/update
+  operations.
 - The first screen is profile selection. Add friends through `프로필 추가`.
 - The selected profile is shown in the header on every view except profile selection.
 - Profiles can be edited or deleted from the profile selection screen.
 - Profile and restaurant icons open a square crop editor before upload.
+- Menu photos open a four-corner crop editor before upload; the selected area is
+  saved as a corrected rectangular JPEG while preserving the original local file.
+- Cropping can be reopened after confirmation if the user notices a mistake
+  before submitting the form.
 - Restaurant detail defaults to `내 기록`; `전체 기록` includes friends' visits.
 - Menu photo labels are intentionally omitted for now.
 - Menu item categories are intentionally omitted for now.
@@ -210,6 +232,11 @@ MenuDex should feel like a personal menu notebook, not a company dashboard.
 ## Data Model
 
 The schema draft lives in `supabase/migrations/0001_initial_schema.sql`.
+Maintenance notes and cleanup history live in `docs/maintenance.md`.
+
+The eighth migration links visit photos to individual `visit_menu_items` so one
+visit can contain multiple menus without sharing the same food photos across all
+menu reviews.
 
 Core tables:
 
@@ -219,7 +246,8 @@ Core tables:
 - `menu_annotations`: editable highlight overlays for menu photos.
 - `menu_items`: optional structured menu records with name, optional price, and active/inactive state.
 - `visits`: restaurant visits with date and meal type.
-- `visit_photos`: optional food/visit photos attached to a visit.
+- `visit_photos`: optional food photos attached to a visit and, for new data,
+  to a specific tried menu row.
 - `visit_menu_items`: menus tried during visits, with optional structured menu item link, manual name, rating, and review.
 
 Ownership:
@@ -264,10 +292,13 @@ src/
     app-auth.ts
     date.ts
     domain.ts
+    image-crop.ts
     use-app-session.ts
     supabase/
       admin.ts
       types.ts
+docs/
+  maintenance.md
 supabase/
   migrations/
     0001_initial_schema.sql

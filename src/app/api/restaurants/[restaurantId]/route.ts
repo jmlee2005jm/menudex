@@ -247,8 +247,13 @@ export async function PATCH(
     auth.session.ownerId,
     form.get("icon"),
   );
+  const shouldDeleteIcon = form.get("deleteIcon") === "true";
 
   if (iconStoragePath && current.data?.icon_storage_path) {
+    await supabase.storage.from("menu-photos").remove([current.data.icon_storage_path]);
+  }
+
+  if (!iconStoragePath && shouldDeleteIcon && current.data?.icon_storage_path) {
     await supabase.storage.from("menu-photos").remove([current.data.icon_storage_path]);
   }
 
@@ -265,6 +270,7 @@ export async function PATCH(
       latitude,
       longitude,
       ...(iconStoragePath ? { icon_storage_path: iconStoragePath } : {}),
+      ...(!iconStoragePath && shouldDeleteIcon ? { icon_storage_path: null } : {}),
     })
     .eq("id", restaurantId)
     .eq("user_id", auth.session.ownerId);

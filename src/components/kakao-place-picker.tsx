@@ -252,8 +252,7 @@ export function KakaoPlacePicker({
       ) : null}
       {typeof selected.latitude === "number" && typeof selected.longitude === "number" ? (
         <p className="text-sm text-ink/60">
-          선택됨: {selected.label} · {selected.latitude.toFixed(6)},{" "}
-          {selected.longitude.toFixed(6)}
+          선택됨: {selected.label}
         </p>
       ) : (
         <p className="text-sm text-ink/55">

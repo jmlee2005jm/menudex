@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("visits")
     .select(
-      "id, restaurant_id, profile_id, visited_at, created_at, meal_type, profiles(display_name), restaurants(name, branch_name), visit_photos(*), visit_menu_items(manual_menu_name, rating, review, menu_items(name))",
+      "id, restaurant_id, profile_id, visited_at, created_at, meal_type, profiles(display_name), restaurants(name, branch_name), visit_photos(*), visit_menu_items(id, manual_menu_name, rating, review, menu_items(name))",
     )
     .eq("user_id", auth.session.ownerId)
     .order("visited_at", { ascending: false })

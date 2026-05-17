@@ -29,6 +29,7 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
   const [dataLoading, setDataLoading] = useState(false);
   const [nameError, setNameError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!authenticated) {
@@ -63,6 +64,10 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting) {
+      return;
+    }
+
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") ?? "").trim();
 
@@ -73,6 +78,7 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
 
     setNameError("");
     setSubmitError("");
+    setSubmitting(true);
 
     const response = await fetch(`/api/restaurants/${restaurantId}`, {
       method: "PATCH",
@@ -82,6 +88,7 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
 
     if (!response.ok) {
       setSubmitError(data.error ?? "식당을 수정하지 못했습니다.");
+      setSubmitting(false);
       return;
     }
 
@@ -145,6 +152,17 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
               cropSquare
               currentPreviewUrl={restaurant.iconUrl}
             />
+            {restaurant.iconUrl ? (
+              <label className="mt-2 flex min-h-10 items-center gap-2 text-sm text-ink/70">
+                <input
+                  type="checkbox"
+                  name="deleteIcon"
+                  value="true"
+                  className="h-4 w-4"
+                />
+                아이콘 삭제
+              </label>
+            ) : null}
           </Field>
           <Field label="위치">
             <KakaoPlacePicker
@@ -156,7 +174,9 @@ export function EditRestaurantForm({ restaurantId }: { restaurantId: string }) {
           <Field label="메모">
             <TextArea name="notes" defaultValue={restaurant.notes ?? ""} />
           </Field>
-          <SubmitButton>식당 수정</SubmitButton>
+          <SubmitButton disabled={submitting}>
+            {submitting ? "저장 중..." : "식당 수정"}
+          </SubmitButton>
           {submitError ? <p className="text-sm text-red-700">{submitError}</p> : null}
         </form>
       ) : null}

@@ -16,9 +16,11 @@ export default function ProfilesPage() {
   const [loading, setLoading] = useState(true);
   const [nameError, setNameError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [createSubmitting, setCreateSubmitting] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState("");
   const [editNameError, setEditNameError] = useState("");
   const [editSubmitError, setEditSubmitError] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   useEffect(() => {
     loadProfiles();
@@ -56,6 +58,10 @@ export default function ProfilesPage() {
 
   async function createProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (createSubmitting) {
+      return;
+    }
+
     const form = new FormData(event.currentTarget);
     const displayName = String(form.get("displayName") ?? "").trim();
 
@@ -66,6 +72,7 @@ export default function ProfilesPage() {
 
     setNameError("");
     setSubmitError("");
+    setCreateSubmitting(true);
 
     const response = await fetch("/api/profiles", {
       method: "POST",
@@ -75,6 +82,7 @@ export default function ProfilesPage() {
 
     if (!response.ok || !data.id) {
       setSubmitError(data.error ?? "프로필을 만들지 못했습니다.");
+      setCreateSubmitting(false);
       return;
     }
 
@@ -84,6 +92,10 @@ export default function ProfilesPage() {
 
   async function updateProfile(event: FormEvent<HTMLFormElement>, profileId: string) {
     event.preventDefault();
+    if (editSubmitting) {
+      return;
+    }
+
     const form = new FormData(event.currentTarget);
     const displayName = String(form.get("displayName") ?? "").trim();
 
@@ -94,6 +106,7 @@ export default function ProfilesPage() {
 
     setEditNameError("");
     setEditSubmitError("");
+    setEditSubmitting(true);
 
     const response = await fetch(`/api/profiles/${profileId}`, {
       method: "PATCH",
@@ -103,12 +116,14 @@ export default function ProfilesPage() {
 
     if (!response.ok) {
       setEditSubmitError(data.error ?? "프로필을 수정하지 못했습니다.");
+      setEditSubmitting(false);
       return;
     }
 
     clearCachedJson("/api/profiles");
     clearCachedJson("/api/session");
     setEditingProfileId("");
+    setEditSubmitting(false);
     await loadProfiles();
   }
 
@@ -123,6 +138,7 @@ export default function ProfilesPage() {
 
     setEditNameError("");
     setEditSubmitError("");
+    setEditSubmitting(true);
 
     const response = await fetch(`/api/profiles/${profileId}`, {
       method: "DELETE",
@@ -131,6 +147,7 @@ export default function ProfilesPage() {
 
     if (!response.ok) {
       setEditSubmitError(data.error ?? "프로필을 삭제하지 못했습니다.");
+      setEditSubmitting(false);
       return;
     }
 
@@ -139,6 +156,7 @@ export default function ProfilesPage() {
     clearCachedJson("/api/visits");
     await fetch("/api/session", { method: "DELETE" });
     setEditingProfileId("");
+    setEditSubmitting(false);
     await loadProfiles();
   }
 
@@ -174,23 +192,28 @@ export default function ProfilesPage() {
                     </Field>
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="flex flex-wrap gap-2">
-                        <SubmitButton>저장</SubmitButton>
+                        <SubmitButton disabled={editSubmitting}>
+                          {editSubmitting ? "저장 중..." : "저장"}
+                        </SubmitButton>
                         <button
                           type="button"
+                          disabled={editSubmitting}
                           onClick={() => {
                             setEditingProfileId("");
                             setEditNameError("");
                             setEditSubmitError("");
+                            setEditSubmitting(false);
                           }}
-                          className="inline-flex min-h-11 items-center justify-center border border-line bg-white px-4 text-sm font-medium text-ink"
+                          className="inline-flex min-h-11 items-center justify-center border border-line bg-white px-4 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:bg-ink/5 disabled:text-ink/35"
                         >
                           취소
                         </button>
                       </div>
                       <button
                         type="button"
+                        disabled={editSubmitting}
                         onClick={() => deleteProfile(profile.id, profile.display_name)}
-                        className="inline-flex min-h-11 items-center justify-center border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-700"
+                        className="inline-flex min-h-11 items-center justify-center border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-700 disabled:cursor-not-allowed disabled:bg-red-50/40 disabled:text-red-700/35"
                       >
                         프로필 삭제
                       </button>
@@ -250,7 +273,9 @@ export default function ProfilesPage() {
             <Field label="아이콘">
               <PasteImageInput name="icon" accept="image/*" compact preview cropSquare />
             </Field>
-            <SubmitButton>프로필 만들기</SubmitButton>
+            <SubmitButton disabled={createSubmitting}>
+              {createSubmitting ? "저장 중..." : "프로필 만들기"}
+            </SubmitButton>
             {submitError ? <p className="text-sm text-red-700">{submitError}</p> : null}
           </form>
         </div>
