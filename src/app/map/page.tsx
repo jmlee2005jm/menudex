@@ -73,7 +73,7 @@ export default function MapPage() {
       {dataError ? <p className="mt-4 text-sm text-red-700">{dataError}</p> : null}
       {configured && authenticated && !dataLoading ? (
         <div className="mt-6">
-          <KakaoMap restaurants={restaurants} />
+          <KakaoMap restaurants={restaurants} level={2} />
         </div>
       ) : null}
     </PageShell>

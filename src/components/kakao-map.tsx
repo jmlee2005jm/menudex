@@ -10,6 +10,20 @@ type MapRestaurant = RestaurantRow & {
   longitude: number;
 };
 
+type MapInstance = {
+  setCenter: (latLng: { getLat: () => number; getLng: () => number }) => void;
+};
+
+type MapMarker = {
+  setMap: (map: MapInstance | null) => void;
+  setPosition: (position: { getLat: () => number; getLng: () => number }) => void;
+};
+
+type MapInfoWindow = {
+  open: (map: MapInstance, marker: MapMarker) => void;
+  close: () => void;
+};
+
 export function KakaoMap({
   restaurants,
   heightClassName = "h-[62vh] min-h-80",
@@ -24,7 +38,11 @@ export function KakaoMap({
   level?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapInstance | null>(null);
+  const markerRefs = useRef<Record<string, MapMarker>>({});
+  const infoWindowRefs = useRef<Record<string, MapInfoWindow>>({});
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState("");
   const [currentLocation, setCurrentLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -110,6 +128,9 @@ export function KakaoMap({
           ),
           level,
         });
+        mapRef.current = map;
+        markerRefs.current = {};
+        infoWindowRefs.current = {};
 
         for (const restaurant of mappedRestaurants) {
           const marker = new window.kakao.maps.Marker({
@@ -120,11 +141,13 @@ export function KakaoMap({
             ),
           });
           const infoWindow = new window.kakao.maps.InfoWindow({
-            content: `<div style="padding:8px 10px;font-size:13px;line-height:1.35;white-space:nowrap;"><strong>${escapeHtml(restaurant.name)}</strong>${restaurant.branch_name ? `<br><span>${escapeHtml(restaurant.branch_name)}</span>` : ""}</div>`,
+            content: `<div style="padding:8px 10px;font-size:13px;line-height:1.35;white-space:nowrap;"><strong>${escapeHtml(restaurant.name)}</strong>${restaurant.branch_name ? `<br><span>${escapeHtml(restaurant.branch_name)}</span>` : ""}<br><a href="/restaurants/${restaurant.id}" style="color:#267a59;text-decoration:underline;">상세 보기</a></div>`,
           });
+          markerRefs.current[restaurant.id] = marker;
+          infoWindowRefs.current[restaurant.id] = infoWindow;
 
           window.kakao.maps.event.addListener(marker, "click", () => {
-            infoWindow.open(map, marker);
+            focusRestaurant(restaurant);
           });
         }
 
@@ -138,6 +161,26 @@ export function KakaoMap({
       cancelled = true;
     };
   }, [appKey, currentLocation, defaultToCurrentLocation, level, mappedRestaurants]);
+
+  function focusRestaurant(restaurant: MapRestaurant) {
+    if (!window.kakao || !mapRef.current) {
+      return;
+    }
+
+    const marker = markerRefs.current[restaurant.id];
+    const infoWindow = infoWindowRefs.current[restaurant.id];
+
+    if (!marker || !infoWindow) {
+      return;
+    }
+
+    Object.values(infoWindowRefs.current).forEach((window) => window.close());
+    mapRef.current.setCenter(
+      new window.kakao.maps.LatLng(restaurant.latitude, restaurant.longitude),
+    );
+    infoWindow.open(mapRef.current, marker);
+    setSelectedRestaurantId(restaurant.id);
+  }
 
   if (!appKey) {
     return (
@@ -174,18 +217,33 @@ export function KakaoMap({
         </p>
       ) : null}
       {showRestaurantList ? (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-1.5 sm:grid-cols-2">
           {mappedRestaurants.map((restaurant) => (
-            <Link
+            <div
               key={restaurant.id}
-              href={`/restaurants/${restaurant.id}`}
-              className="border border-line bg-white/75 p-3"
+              className={`flex items-center justify-between gap-2 border bg-white/75 px-2.5 py-2 ${
+                selectedRestaurantId === restaurant.id ? "border-leaf" : "border-line"
+              }`}
             >
-              <p className="font-medium">{restaurant.name}</p>
-              {restaurant.branch_name ? (
-                <p className="mt-0.5 text-sm text-ink/55">{restaurant.branch_name}</p>
-              ) : null}
-            </Link>
+              <button
+                type="button"
+                onClick={() => focusRestaurant(restaurant)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <span className="block truncate text-sm font-medium">{restaurant.name}</span>
+                {restaurant.branch_name ? (
+                  <span className="block truncate text-xs text-ink/55">
+                    {restaurant.branch_name}
+                  </span>
+                ) : null}
+              </button>
+              <Link
+                href={`/restaurants/${restaurant.id}`}
+                className="shrink-0 text-xs font-medium text-leaf underline"
+              >
+                상세
+              </Link>
+            </div>
           ))}
         </div>
       ) : null}

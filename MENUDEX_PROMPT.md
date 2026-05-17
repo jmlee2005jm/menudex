@@ -41,6 +41,8 @@ The main flow is:
 - Highlights are separate overlay data and must be reversible.
 - Profile icons and restaurant icons are optional.
 - Use `defaulticon.png` fallback for profiles without icons.
+- For restaurants without icons, omit the icon space instead of showing weak
+  placeholder boxes.
 - Any create/update submit button should disable immediately after one press to
   prevent duplicate requests.
 - Menu photos are owned by the uploading profile; only that profile may delete them.
@@ -81,11 +83,17 @@ The main flow is:
 - Recent visit views should group menus under the same visit while still showing
   each menu and its own photo/review separately.
 - Visit photo display should stay small and not interfere with current visit entry size.
+- Visit entries should keep the same photo-column format whether or not a photo
+  exists. If the selected profile owns an entry without a photo, show a small
+  dotted `+` box that enters the photo-add edit flow.
 - Clicking a saved visit photo should open a dark-background lightbox with a
   larger image, similar to a Naver Blog photo viewer.
 - Menu photo upload should support scan-style four-corner cropping before saving.
   The crop should start with the whole image visible, let the user drag the four
   corners, and save a corrected rectangular image.
+- Image paste/upload boxes must open the file picker only from the black
+  `파일 선택` button. Clicking anywhere else inside the dotted box should only
+  focus the paste area so copied images can be pasted.
 - After crop confirmation, users should be able to return to the crop editor and
   correct mistakes before submitting the form.
 - Visit edit should keep photo controls compact: show current thumbnail, optional
@@ -97,6 +105,10 @@ The main flow is:
 - Kakao Maps should appear directly in the product flow: `/restaurants` shows
   all coordinate-enabled restaurants, each restaurant detail shows that
   restaurant's location, and `/map` remains a larger all-restaurant map view.
+- On the large `/map` view, clicking a restaurant in the compact list should
+  focus its map marker; use a separate small `상세` link for restaurant page
+  navigation.
+- The large `/map` view should default to a close 50m-scale map view.
 - The `/restaurants` map should default to current location at roughly a 200m
   local scale.
 - Kakao Maps uses optional restaurant latitude/longitude fields internally and

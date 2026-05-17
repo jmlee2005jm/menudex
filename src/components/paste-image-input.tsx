@@ -289,6 +289,13 @@ export function PasteImageInput({
     <div
       tabIndex={0}
       onPaste={handlePaste}
+      onClick={(event) => {
+        if (event.target instanceof HTMLElement && event.target.closest("button,input")) {
+          return;
+        }
+
+        event.currentTarget.focus();
+      }}
       className={`border border-dashed border-line bg-white p-3 outline-none focus:border-leaf ${
         compact ? "grid gap-2" : "grid gap-3"
       }`}
@@ -303,6 +310,7 @@ export function PasteImageInput({
       />
       <button
         type="button"
+        data-file-select-button="true"
         onClick={(event) => {
           event.stopPropagation();
           inputRef.current?.click();

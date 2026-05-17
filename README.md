@@ -32,6 +32,8 @@ Implemented:
   individual tried menus inside a visit.
 - New visit logging accepts separate photo inputs per menu row.
 - Saved visit photo thumbnails open a dark-background larger photo viewer.
+- Restaurant detail visit rows reserve a consistent photo slot; empty owned rows
+  show a small dotted `+` affordance for adding a menu photo.
 - Visit edit supports compact photo replace/delete controls inside the existing
   review edit form.
 - Delete controls for accidental restaurant, menu photo, manual menu, and visit entries.
@@ -51,7 +53,7 @@ Implemented:
 - `/restaurants` map defaults to the current location at an approximately
   neighborhood-level scale before the user interacts with it.
 - Restaurant detail shows that restaurant's location on Kakao Maps when coordinates exist.
-- `/map` provides a larger all-restaurant map view.
+- `/map` provides a larger all-restaurant map view with a close default scale.
 - Restaurant creation/edit stores optional latitude and longitude internally for
   maps, but the UI does not show raw coordinate values.
 - Restaurants are shared across profiles.
@@ -196,6 +198,8 @@ restart the Next.js dev server.
 - Restaurant categories are split into broad cuisine and food/service type.
 - Restaurant icons are manually uploaded by the user; no logo scraping is used.
 - Restaurant icon deletion is supported from the edit screen.
+- Restaurants without icons display as text-only rows instead of placeholder
+  icon boxes.
 - Submit buttons should lock immediately after the first press for create/update
   operations.
 - The first screen is profile selection. Add friends through `프로필 추가`.

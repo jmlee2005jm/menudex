@@ -18,6 +18,15 @@ the same constraints and avoid rediscovering known issues.
   upload fails, the partially created visit and uploaded files are cleaned up.
 - Confirmed the accidental `기타` visit was one visit containing three menu rows,
   and updated that visit to `저녁`.
+- Adjusted the large map interaction so compact restaurant rows focus the marker
+  and use a separate detail link for navigation.
+- Set the large `/map` view to a close default zoom level.
+- Removed weak restaurant icon placeholder boxes; restaurants without icons now
+  render as text-only rows.
+- Standardized restaurant-detail visit rows so photo/no-photo entries keep a
+  consistent photo slot; owned no-photo rows use a dotted add-photo affordance.
+- Fixed the shared `Field` wrapper so complex inputs are no longer wrapped in a
+  label that makes the whole dotted image-paste area trigger file selection.
 
 ## Regular Checklist
 

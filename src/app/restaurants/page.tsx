@@ -305,11 +305,7 @@ export default function RestaurantsPage() {
                         alt=""
                         className="h-12 w-12 shrink-0 border border-line bg-white object-contain"
                       />
-                    ) : (
-                      <div className="grid h-12 w-12 shrink-0 place-items-center border border-line bg-white text-sm font-semibold text-ink/50">
-                        {restaurant.name.slice(0, 1)}
-                      </div>
-                    )}
+                    ) : null}
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                         <h2 className="break-words text-lg font-semibold">{restaurant.name}</h2>

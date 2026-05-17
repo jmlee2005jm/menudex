@@ -20,14 +20,14 @@ export function Field({
   error?: string;
 }) {
   return (
-    <label className="block">
+    <div className="block">
       <span className="text-sm font-medium text-ink/70">
         {label}
         {required ? <span className="ml-1 text-leaf">필수</span> : null}
       </span>
       <div className="mt-1">{children}</div>
       {error ? <p className="mt-1 text-sm text-red-700">{error}</p> : null}
-    </label>
+    </div>
   );
 }
 

@@ -17,6 +17,7 @@ type KakaoMarker = {
 };
 type KakaoInfoWindow = {
   open: (map: KakaoMap, marker: KakaoMarker) => void;
+  close: () => void;
 };
 type KakaoPlaceSearchResult = {
   id: string;

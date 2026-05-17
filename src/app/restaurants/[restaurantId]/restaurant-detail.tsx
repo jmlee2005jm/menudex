@@ -501,10 +501,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
             </div>
             <div className="mt-3 grid gap-2">
               {visitCards.map((visit) => (
-                <div
-                  key={visit.id}
-                  className="flex flex-col gap-2 border border-line bg-white/70 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                >
+                <div key={visit.id} className="border border-line bg-white/70 px-3 py-2">
                   <div className="min-w-0 flex-1 self-stretch sm:self-auto">
                     {editingReviewId === visit.id ? (
                       <form
@@ -574,67 +571,79 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                         ) : null}
                       </form>
                     ) : (
-                      <div className="flex min-h-10 flex-col justify-center">
-                        <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1">
-                          <p className="break-words font-medium leading-tight">{visit.menuName}</p>
-                          <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-tight text-ink/60">
-                            <span className="hidden sm:inline">·</span>
-                            <span>{visit.visitedAt}</span>
-                            <span>·</span>
-                            <span>{mealLabels[visit.mealType]}</span>
-                            {visitScope === "all" ? (
-                              <>
-                                <span>·</span>
-                                <span>{visit.profileName}</span>
-                              </>
-                            ) : null}
-                            <span>·</span>
-                            <RatingDisplay value={visit.rating} />
+                      <div className="grid min-h-14 grid-cols-[minmax(0,1fr)_3.5rem] gap-3 sm:grid-cols-[minmax(0,1fr)_3.5rem_auto] sm:items-center">
+                        <div className="flex min-w-0 flex-col justify-center">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1">
+                            <p className="break-words font-medium leading-tight">{visit.menuName}</p>
+                            <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-tight text-ink/60">
+                              <span className="hidden sm:inline">·</span>
+                              <span>{visit.visitedAt}</span>
+                              <span>·</span>
+                              <span>{mealLabels[visit.mealType]}</span>
+                              {visitScope === "all" ? (
+                                <>
+                                  <span>·</span>
+                                  <span>{visit.profileName}</span>
+                                </>
+                              ) : null}
+                              <span>·</span>
+                              <RatingDisplay value={visit.rating} />
+                            </div>
                           </div>
+                          {visit.review ? (
+                            <p className="mt-2 break-words text-sm">{visit.review}</p>
+                          ) : null}
                         </div>
-                        {visit.review ? (
-                          <p className="mt-2 break-words text-sm">{visit.review}</p>
+                        <VisitPhotoSlot
+                          photoUrl={visit.photoUrls[0]}
+                          canAddPhoto={visit.profileId === profile?.id}
+                          onOpenPhoto={() => {
+                            if (visit.photoUrls[0]) {
+                              setLightboxPhotoUrl(visit.photoUrls[0]);
+                            }
+                          }}
+                          onAddPhoto={() => startEditingReview(visit)}
+                        />
+                        {visit.profileId !== profile?.id ? null : (
+                          <div className="col-span-2 flex shrink-0 justify-end gap-2 sm:col-span-1 sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => startEditingReview(visit)}
+                              className="min-h-10 whitespace-nowrap border border-line bg-white px-3 text-sm font-medium text-ink"
+                            >
+                              수정
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteVisit(visit.visitId)}
+                              className="min-h-10 whitespace-nowrap border border-red-200 bg-white px-3 text-sm font-medium text-red-700"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        )}
+                        {visit.photoUrls.length > 1 ? (
+                          <div className="col-span-2 flex gap-1 overflow-hidden sm:col-start-2 sm:col-end-3">
+                            {visit.photoUrls.slice(1, 3).map((photoUrl) => (
+                              <button
+                                key={photoUrl}
+                                type="button"
+                                onClick={() => setLightboxPhotoUrl(photoUrl)}
+                                className="shrink-0"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={photoUrl}
+                                  alt=""
+                                  className="h-10 w-10 border border-line bg-white object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
                         ) : null}
                       </div>
                     )}
                   </div>
-                  {editingReviewId !== visit.id && visit.photoUrls.length > 0 ? (
-                    <div className="flex max-w-44 shrink-0 gap-1 overflow-hidden self-start sm:self-center">
-                      {visit.photoUrls.slice(0, 3).map((photoUrl) => (
-                        <button
-                          key={photoUrl}
-                          type="button"
-                          onClick={() => setLightboxPhotoUrl(photoUrl)}
-                          className="shrink-0"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={photoUrl}
-                            alt=""
-                            className="h-14 w-14 border border-line bg-white object-cover"
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                  {editingReviewId === visit.id || visit.profileId !== profile?.id ? null : (
-                    <div className="flex shrink-0 justify-end gap-2 self-start sm:self-center">
-                      <button
-                        type="button"
-                        onClick={() => startEditingReview(visit)}
-                        className="min-h-10 whitespace-nowrap border border-line bg-white px-3 text-sm font-medium text-ink"
-                      >
-                        수정
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteVisit(visit.visitId)}
-                        className="min-h-10 whitespace-nowrap border border-red-200 bg-white px-3 text-sm font-medium text-red-700"
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  )}
                 </div>
               ))}
               {visitCards.length === 0 ? (
@@ -720,4 +729,49 @@ function photosForVisitMenuItem(visit: VisitWithMenu, visitMenuItemId: string) {
   return [...matchedPhotos, ...legacyPhotos]
     .map((photo) => photo.signedUrl)
     .filter((url): url is string => Boolean(url));
+}
+
+function VisitPhotoSlot({
+  photoUrl,
+  canAddPhoto,
+  onOpenPhoto,
+  onAddPhoto,
+}: {
+  photoUrl?: string;
+  canAddPhoto: boolean;
+  onOpenPhoto: () => void;
+  onAddPhoto: () => void;
+}) {
+  if (photoUrl) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenPhoto}
+        className="h-14 w-14 shrink-0 self-start sm:self-center"
+        aria-label="방문 사진 크게 보기"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photoUrl}
+          alt=""
+          className="h-14 w-14 border border-line bg-white object-cover"
+        />
+      </button>
+    );
+  }
+
+  if (canAddPhoto) {
+    return (
+      <button
+        type="button"
+        onClick={onAddPhoto}
+        className="grid h-14 w-14 shrink-0 place-items-center border border-dashed border-line bg-white text-2xl leading-none text-ink/35"
+        aria-label="메뉴 사진 추가"
+      >
+        +
+      </button>
+    );
+  }
+
+  return <div className="h-14 w-14 shrink-0 border border-dashed border-line bg-white/40" />;
 }
