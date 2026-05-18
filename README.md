@@ -26,6 +26,8 @@ Implemented:
 - Menu photos display at screen width without horizontal overflow.
 - Rectangular semi-transparent highlights can be drawn, confirmed, canceled, and deleted later.
 - Menu photo upload and optional manual menu entry share one `메뉴 추가` screen.
+- `메뉴 추가` can select multiple menu photos, crop them one by one, and save
+  them in a single request.
 - Supabase-backed visit logging with meal type, one or more tried menus,
   half-star ratings, and optional short reviews.
 - Optional food photos are stored separately from menu photos and attached to
@@ -54,6 +56,8 @@ Implemented:
   neighborhood-level scale before the user interacts with it.
 - Restaurant detail shows that restaurant's location on Kakao Maps when coordinates exist.
 - `/map` provides a larger all-restaurant map view with a close default scale.
+- `/map` has search/category/location filters and defaults to restaurants with
+  saved coordinates.
 - Restaurant creation/edit stores optional latitude and longitude internally for
   maps, but the UI does not show raw coordinate values.
 - Restaurants are shared across profiles.
@@ -61,8 +65,13 @@ Implemented:
 - Menu photos are owned by the profile that uploaded them; only that profile can delete them.
 - Restaurant list can sort by name, latest visit, or visit count, with a compact
   arrow button for direction.
+- Restaurant list can filter by cuisine category, food type, visit status, and
+  map-location status. Filter defaults are intentionally broad so the existing
+  list remains unchanged until the user chooses a filter.
 - `/restaurants` shows a compact recent visits panel with up to 4 visits and a
   `더 보기` link to `/visits`.
+- The recent visits panel is height-limited inside the viewport and scrolls
+  internally if its contents are taller than the available space.
 - Recent visits support `내 최근` and `전체 최근` tabs and show the visiting profile.
 - Session/profile state is fetched once through a shared app provider, so the
   header and page content do not duplicate session requests.
@@ -78,7 +87,7 @@ Not implemented yet:
 - Linking annotations to visits/menu items.
 - Full auth route protection middleware.
 - OCR.
-- Kakao map clustering or advanced filtering.
+- Kakao map clustering.
 
 ## Stack
 
@@ -196,6 +205,8 @@ restart the Next.js dev server.
 - If `목표 메뉴 수` is not entered yet, the card shows `해금된 메뉴 x/?`.
 - Restaurant name and branch/place are displayed as separate text treatments.
 - Restaurant categories are split into broad cuisine and food/service type.
+- Category filter order follows the app's shared cuisine and food/service option
+  lists; default filters show all matching restaurants.
 - Restaurant icons are manually uploaded by the user; no logo scraping is used.
 - Restaurant icon deletion is supported from the edit screen.
 - Restaurants without icons display as text-only rows instead of placeholder

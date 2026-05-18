@@ -27,10 +27,19 @@ the same constraints and avoid rediscovering known issues.
   consistent photo slot; owned no-photo rows use a dotted add-photo affordance.
 - Fixed the shared `Field` wrapper so complex inputs are no longer wrapped in a
   label that makes the whole dotted image-paste area trigger file selection.
+- Documented the `/restaurants` recent-visit panel behavior: max 4 entries,
+  viewport-constrained height, internal scrolling.
+- Added the first restaurant filtering layer: cuisine, food type, visit status,
+  and location status on `/restaurants`; search/category/location filtering on
+  `/map`.
+- Extended menu photo upload so multiple cropped photos can be saved in one
+  submit, with API cleanup if any storage or database step fails.
 
 ## Regular Checklist
 
 - Read `MENUDEX_PROMPT.md` before making changes.
+- On the first MenuDex chat after 6 PM local time each day, run a maintenance
+  check before or alongside the requested work.
 - Keep `README.md` and this file current when product behavior or architecture
   changes.
 - Prefer splitting large UI files when utility logic grows beyond the component.

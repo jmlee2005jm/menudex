@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   LoadingState,
   LoginRequired,
@@ -17,8 +17,8 @@ import { useAppSession } from "@/lib/use-app-session";
 export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
   const router = useRouter();
   const { authenticated, loading, configured } = useAppSession();
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [converting, setConverting] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [photoSubmitError, setPhotoSubmitError] = useState("");
@@ -27,10 +27,17 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
   const [menuSubmitError, setMenuSubmitError] = useState("");
   const [menuSubmitting, setMenuSubmitting] = useState(false);
 
-  async function handleImageFile(file: File | undefined) {
-    if (!file) {
-      setPreviewUrl("");
-      setSelectedFile(null);
+  useEffect(
+    () => () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    },
+    [previewUrls],
+  );
+
+  async function handleImageFiles(files: File[]) {
+    if (files.length === 0) {
+      setPreviewUrls([]);
+      setSelectedFiles([]);
       return;
     }
 
@@ -39,12 +46,20 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
     setConverting(true);
 
     try {
-      const imageFile = isHeicFile(file) ? await convertHeicToJpeg(file) : file;
-      setSelectedFile(imageFile);
-      setPreviewUrl(URL.createObjectURL(imageFile));
+      const imageFiles = await Promise.all(
+        files.map((file) => (isHeicFile(file) ? convertHeicToJpeg(file) : file)),
+      );
+      setSelectedFiles(imageFiles);
+      setPreviewUrls((current) => {
+        current.forEach((url) => URL.revokeObjectURL(url));
+        return imageFiles.map((file) => URL.createObjectURL(file));
+      });
     } catch {
-      setSelectedFile(null);
-      setPreviewUrl("");
+      setSelectedFiles([]);
+      setPreviewUrls((current) => {
+        current.forEach((url) => URL.revokeObjectURL(url));
+        return [];
+      });
       setPhotoError("HEIC 사진을 JPEG로 변환하지 못했습니다. 다른 사진을 선택하세요.");
     } finally {
       setConverting(false);
@@ -59,9 +74,14 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
     }
 
     const form = new FormData(event.currentTarget);
-    const file = selectedFile ?? form.get("menuPhoto");
+    const files =
+      selectedFiles.length > 0
+        ? selectedFiles
+        : form
+            .getAll("menuPhoto")
+            .filter((file): file is File => file instanceof File && file.size > 0);
 
-    if (!(file instanceof File) || file.size === 0) {
+    if (files.length === 0) {
       setPhotoError("메뉴 사진을 선택하세요.");
       return;
     }
@@ -69,7 +89,8 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
     setPhotoError("");
     setPhotoSubmitError("");
     setPhotoSubmitting(true);
-    form.set("menuPhoto", file);
+    form.delete("menuPhoto");
+    files.forEach((file) => form.append("menuPhoto", file));
 
     const response = await fetch(`/api/restaurants/${restaurantId}/menu-photos`, {
       method: "POST",
@@ -145,35 +166,45 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
             <div>
               <h2 className="text-lg font-semibold">메뉴 사진</h2>
               <p className="mt-1 text-sm leading-6 text-ink/65">
-                기본 방식입니다. 휴대폰 갤러리나 컴퓨터에서 메뉴 사진을 선택하세요.
+                기본 방식입니다. 여러 장을 선택하면 순서대로 자른 뒤 한 번에 저장합니다.
               </p>
             </div>
             <Field label="메뉴 사진" required error={photoError}>
               <PasteImageInput
                 name="menuPhoto"
                 accept="image/*,.heic,.heif,image/heic,image/heif"
-                onFile={handleImageFile}
+                onFiles={handleImageFiles}
+                multiple
                 cropMenuPhoto
               />
             </Field>
             {converting ? (
               <p className="text-sm text-ink/60">HEIC 사진을 JPEG로 변환하는 중...</p>
             ) : null}
-            {previewUrl ? (
-              <div className="border border-line bg-white/70 p-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={previewUrl}
-                  alt="선택한 메뉴 미리보기"
-                  className="h-auto w-full bg-white object-contain"
-                />
+            {previewUrls.length > 0 ? (
+              <div className="grid gap-3 border border-line bg-white/70 p-3 sm:grid-cols-2">
+                {previewUrls.map((previewUrl, index) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={previewUrl}
+                    src={previewUrl}
+                    alt={`선택한 메뉴 미리보기 ${index + 1}`}
+                    className="h-auto w-full bg-white object-contain"
+                  />
+                ))}
               </div>
             ) : null}
             <Field label="촬영일" required>
               <DateSelectInput name="takenAt" defaultValue={todayDateValue()} />
             </Field>
             <SubmitButton disabled={converting || photoSubmitting}>
-              {photoSubmitting ? "저장 중..." : converting ? "변환 중..." : "메뉴 사진 추가"}
+              {photoSubmitting
+                ? "저장 중..."
+                : converting
+                  ? "변환 중..."
+                  : selectedFiles.length > 1
+                    ? `메뉴 사진 ${selectedFiles.length}장 추가`
+                    : "메뉴 사진 추가"}
             </SubmitButton>
             {photoSubmitError ? (
               <p className="text-sm text-red-700">{photoSubmitError}</p>

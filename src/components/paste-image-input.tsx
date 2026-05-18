@@ -25,7 +25,9 @@ const cropViewportSizes = {
 export function PasteImageInput({
   name,
   onFile,
+  onFiles,
   accept = "image/*",
+  multiple = false,
   compact = false,
   preview = false,
   currentPreviewUrl,
@@ -34,7 +36,9 @@ export function PasteImageInput({
 }: {
   name: string;
   onFile?: (file: File) => void;
+  onFiles?: (files: File[]) => void;
   accept?: string;
+  multiple?: boolean;
   compact?: boolean;
   preview?: boolean;
   currentPreviewUrl?: string;
@@ -44,9 +48,12 @@ export function PasteImageInput({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const cropImageRef = useRef<HTMLImageElement | null>(null);
   const [fileName, setFileName] = useState("");
+  const [committedFiles, setCommittedFiles] = useState<File[]>([]);
   const [previewUrl, setPreviewUrl] = useState("");
   const [processing, setProcessing] = useState(false);
   const previewUrlRef = useRef("");
+  const committedFilesRef = useRef<File[]>([]);
+  const cropQueueRef = useRef<File[]>([]);
   const originalCropSourceRef = useRef<{
     file: File;
     url: string;
@@ -75,6 +82,10 @@ export function PasteImageInput({
   }, [previewUrl]);
 
   useEffect(() => {
+    committedFilesRef.current = committedFiles;
+  }, [committedFiles]);
+
+  useEffect(() => {
     originalCropSourceRef.current = originalCropSource;
   }, [originalCropSource]);
 
@@ -92,10 +103,10 @@ export function PasteImageInput({
   );
 
   async function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
 
-    if (file) {
-      await acceptFile(file);
+    if (files.length > 0) {
+      await acceptFiles(multiple ? files : files.slice(0, 1));
     }
   }
 
@@ -113,12 +124,31 @@ export function PasteImageInput({
       type: file.type || "image/png",
     });
 
-    await acceptFile(namedFile);
+    await acceptFiles([namedFile]);
   }
 
-  async function acceptFile(file: File) {
+  async function acceptFiles(files: File[]) {
+    const [firstFile, ...queuedFiles] = files;
+
+    if (!firstFile) {
+      return;
+    }
+
     if (cropSquare || cropMenuPhoto) {
-      const next = { file, url: URL.createObjectURL(file) };
+      cropQueueRef.current = multiple ? queuedFiles : [];
+      openCropSource(firstFile, !multiple);
+      return;
+    }
+
+    for (const file of files) {
+      commitFile(file);
+    }
+  }
+
+  function openCropSource(file: File, replaceExisting: boolean) {
+    const next = { file, url: URL.createObjectURL(file) };
+
+    if (replaceExisting) {
       setOriginalCropSource((current) => {
         if (current) {
           URL.revokeObjectURL(current.url);
@@ -131,7 +161,21 @@ export function PasteImageInput({
       setCropOffset({ x: 0, y: 0 });
       setNaturalSize(null);
       setScanCorners(null);
+    } else {
+      originalCropSourceRef.current = null;
+      setOriginalCropSource(null);
+      setCropSource(next);
+      setCropZoom(1);
+      setCropOffset({ x: 0, y: 0 });
+      setNaturalSize(null);
+      setScanCorners(null);
+    }
+
+    if (replaceExisting) {
       setFileName("");
+      committedFilesRef.current = [];
+      setCommittedFiles([]);
+      syncInputFiles([]);
       setPreviewUrl((current) => {
         if (current) {
           URL.revokeObjectURL(current);
@@ -139,29 +183,33 @@ export function PasteImageInput({
 
         return "";
       });
-      return;
     }
-
-    commitFile(file);
   }
 
   function commitFile(file: File) {
-    const transfer = new DataTransfer();
-    transfer.items.add(file);
-
-    if (inputRef.current) {
-      inputRef.current.files = transfer.files;
-    }
-
-    setFileName(file.name);
+    const nextFiles = multiple ? [...committedFilesRef.current, file] : [file];
+    committedFilesRef.current = nextFiles;
+    setCommittedFiles(nextFiles);
+    syncInputFiles(nextFiles);
+    setFileName(multiple ? `${nextFiles.length}개 선택됨` : file.name);
     setPreviewUrl((current) => {
       if (current) {
         URL.revokeObjectURL(current);
       }
 
-      return preview ? URL.createObjectURL(file) : "";
+      return preview && !multiple ? URL.createObjectURL(file) : "";
     });
     onFile?.(file);
+    onFiles?.(nextFiles);
+  }
+
+  function syncInputFiles(files: File[]) {
+    const transfer = new DataTransfer();
+    files.forEach((file) => transfer.items.add(file));
+
+    if (inputRef.current) {
+      inputRef.current.files = transfer.files;
+    }
   }
 
   async function applyCrop() {
@@ -190,13 +238,22 @@ export function PasteImageInput({
             cropSquare ? "cover" : "contain",
           );
     commitFile(croppedFile);
-    setCropSource(null);
-    setNaturalSize(null);
-    setScanCorners(null);
+    const nextQueuedFile = cropQueueRef.current.shift();
+
+    if (nextQueuedFile) {
+      openCropSource(nextQueuedFile, false);
+    } else {
+      setCropSource(null);
+      setNaturalSize(null);
+      setScanCorners(null);
+    }
+
     setProcessing(false);
   }
 
   function cancelCrop() {
+    cropQueueRef.current = [];
+
     if (!fileName && originalCropSource) {
       URL.revokeObjectURL(originalCropSource.url);
       setOriginalCropSource(null);
@@ -305,6 +362,7 @@ export function PasteImageInput({
         name={name}
         type="file"
         accept={accept}
+        multiple={multiple}
         onChange={handleChange}
         className="hidden"
       />
@@ -473,7 +531,7 @@ export function PasteImageInput({
       {fileName ? (
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm text-ink/70">선택됨: {fileName}</p>
-          {originalCropSource ? (
+          {originalCropSource && !multiple ? (
             <button
               type="button"
               onClick={reopenCrop}

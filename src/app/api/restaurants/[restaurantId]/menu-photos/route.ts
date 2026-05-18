@@ -26,38 +26,59 @@ export async function POST(
   }
 
   const form = await request.formData();
-  const file = form.get("menuPhoto");
+  const files = form
+    .getAll("menuPhoto")
+    .filter((file): file is File => file instanceof File && file.size > 0);
 
-  if (!(file instanceof File) || file.size === 0) {
+  if (files.length === 0) {
     return NextResponse.json(
       { error: "메뉴 사진을 선택하세요." },
       { status: 400 },
     );
   }
 
-  const extension = file.name.split(".").pop() || "jpg";
-  const storagePath = `${auth.session.ownerId}/${restaurantId}/${crypto.randomUUID()}.${extension}`;
-  const upload = await supabase.storage.from("menu-photos").upload(storagePath, file, {
-    upsert: false,
-    contentType: file.type || undefined,
-  });
+  const uploadedPhotos: Array<{ storagePath: string; takenAt: string }> = [];
+  const takenAt = String(form.get("takenAt") ?? "").trim() || todayDateValue();
 
-  if (upload.error) {
-    return NextResponse.json({ error: upload.error.message }, { status: 500 });
+  for (const file of files) {
+    const extension = file.name.split(".").pop() || "jpg";
+    const storagePath = `${auth.session.ownerId}/${restaurantId}/${crypto.randomUUID()}.${extension}`;
+    const upload = await supabase.storage.from("menu-photos").upload(storagePath, file, {
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+
+    if (upload.error) {
+      if (uploadedPhotos.length > 0) {
+        await supabase.storage
+          .from("menu-photos")
+          .remove(uploadedPhotos.map((photo) => photo.storagePath));
+      }
+
+      return NextResponse.json({ error: upload.error.message }, { status: 500 });
+    }
+
+    uploadedPhotos.push({ storagePath, takenAt });
   }
 
-  const { error } = await supabase.from("menu_photos").insert({
-    restaurant_id: restaurantId,
-    owner_profile_id: auth.session.profileId,
-    storage_path: storagePath,
-    taken_at: String(form.get("takenAt") ?? "").trim() || todayDateValue(),
-  });
+  const { error } = await supabase.from("menu_photos").insert(
+    uploadedPhotos.map((photo) => ({
+      restaurant_id: restaurantId,
+      owner_profile_id: auth.session.profileId,
+      storage_path: photo.storagePath,
+      taken_at: photo.takenAt,
+    })),
+  );
 
   if (error) {
+    await supabase.storage
+      .from("menu-photos")
+      .remove(uploadedPhotos.map((photo) => photo.storagePath));
+
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true }, { status: 201 });
+  return NextResponse.json({ ok: true, count: uploadedPhotos.length }, { status: 201 });
 }
 
 export async function DELETE(

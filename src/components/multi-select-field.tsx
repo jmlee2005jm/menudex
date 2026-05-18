@@ -5,17 +5,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 export function MultiSelectField({
   name,
   options,
+  value: controlledValue,
+  onChange,
   defaultValue = "",
   placeholder = "선택",
 }: {
   name: string;
   options: string[];
+  value?: string[];
+  onChange?: (value: string[]) => void;
   defaultValue?: string;
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState(() => parseMultiValue(defaultValue));
+  const [uncontrolledSelected, setUncontrolledSelected] = useState(() =>
+    parseMultiValue(defaultValue),
+  );
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const selected = controlledValue ?? uncontrolledSelected;
   const value = useMemo(() => selected.join(","), [selected]);
 
   useEffect(() => {
@@ -35,11 +42,25 @@ export function MultiSelectField({
   }, [open]);
 
   function toggle(option: string) {
-    setSelected((current) =>
-      current.includes(option)
-        ? current.filter((item) => item !== option)
-        : [...current, option],
-    );
+    const nextSelected = selected.includes(option)
+      ? selected.filter((item) => item !== option)
+      : [...selected, option];
+
+    if (onChange) {
+      onChange(nextSelected);
+      return;
+    }
+
+    setUncontrolledSelected(nextSelected);
+  }
+
+  function clearSelection() {
+    if (onChange) {
+      onChange([]);
+      return;
+    }
+
+    setUncontrolledSelected([]);
   }
 
   return (
@@ -73,16 +94,16 @@ export function MultiSelectField({
               title="선택 지우기"
               onClick={(event) => {
                 event.stopPropagation();
-                setSelected([]);
+                clearSelection();
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   event.stopPropagation();
-                  setSelected([]);
+                  clearSelection();
                 }
               }}
-              className="inline-grid h-6 w-6 place-items-center border border-line bg-white text-base leading-none text-ink/70"
+              className="inline-grid h-6 w-6 place-items-center text-base leading-none text-ink/70"
             >
               ×
             </span>
@@ -92,8 +113,8 @@ export function MultiSelectField({
       </button>
 
       {open ? (
-        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto border border-line bg-white p-2 shadow-sm">
-          <div className="grid gap-1">
+        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto overscroll-contain border border-line bg-white p-2 shadow-sm [scrollbar-gutter:stable]">
+          <div className="grid min-h-full gap-1 bg-white">
             {options.map((option) => {
               const active = selected.includes(option);
 
@@ -122,7 +143,7 @@ export function formatMultiValue(value: string | null) {
   return parseMultiValue(value ?? "").join(" · ");
 }
 
-function parseMultiValue(value: string) {
+export function parseMultiValue(value: string) {
   return value
     .split(",")
     .map((item) => item.trim())

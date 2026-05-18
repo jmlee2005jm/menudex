@@ -10,11 +10,16 @@ import {
 } from "@/components/app-state";
 import { SelectInput } from "@/components/form-fields";
 import { KakaoMap } from "@/components/kakao-map";
-import { formatMultiValue } from "@/components/multi-select-field";
+import {
+  MultiSelectField,
+  formatMultiValue,
+  parseMultiValue,
+} from "@/components/multi-select-field";
 import { PageShell, PrimaryLink, SecondaryLink } from "@/components/page-shell";
 import { PhotoLightbox } from "@/components/photo-lightbox";
 import { RatingDisplay } from "@/components/rating-field";
 import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
+import { cuisineOptions, foodTypeOptions } from "@/lib/restaurant-options";
 import type { RestaurantRow } from "@/lib/supabase/types";
 import { useAppSession } from "@/lib/use-app-session";
 
@@ -48,6 +53,18 @@ const mealLabels = {
   other: "기타",
 };
 
+const visitFilterOptions = [
+  { value: "all", label: "전체" },
+  { value: "visited", label: "방문한 곳" },
+  { value: "unvisited", label: "미방문" },
+] as const;
+
+const locationFilterOptions = [
+  { value: "all", label: "전체" },
+  { value: "located", label: "지도 위치 있음" },
+  { value: "unlocated", label: "지도 위치 없음" },
+] as const;
+
 const restaurantNameCollator = new Intl.Collator("ko-KR", {
   numeric: true,
   sensitivity: "base",
@@ -76,6 +93,12 @@ export default function RestaurantsPage() {
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "lastVisit" | "visitCount">("lastVisit");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
+  const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
+  const [selectedFoodTypes, setSelectedFoodTypes] = useState<string[]>([]);
+  const [visitFilter, setVisitFilter] =
+    useState<(typeof visitFilterOptions)[number]["value"]>("all");
+  const [locationFilter, setLocationFilter] =
+    useState<(typeof locationFilterOptions)[number]["value"]>("all");
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState("");
   const [lightboxPhotoUrl, setLightboxPhotoUrl] = useState("");
@@ -148,8 +171,48 @@ export default function RestaurantsPage() {
             .toLowerCase()
             .includes(normalized),
         );
+    const filteredByOptions = filtered.filter((restaurant) => {
+      const restaurantCuisines = parseMultiValue(restaurant.cuisine_category ?? "");
+      const restaurantFoodTypes = parseMultiValue(restaurant.food_type ?? "");
+      const restaurantVisitCount = countVisits(restaurant.id);
+      const hasLocation =
+        typeof restaurant.latitude === "number" &&
+        typeof restaurant.longitude === "number";
 
-    return [...filtered].sort((left, right) => {
+      if (
+        selectedCuisines.length > 0 &&
+        !selectedCuisines.some((category) => restaurantCuisines.includes(category))
+      ) {
+        return false;
+      }
+
+      if (
+        selectedFoodTypes.length > 0 &&
+        !selectedFoodTypes.some((category) => restaurantFoodTypes.includes(category))
+      ) {
+        return false;
+      }
+
+      if (visitFilter === "visited" && restaurantVisitCount === 0) {
+        return false;
+      }
+
+      if (visitFilter === "unvisited" && restaurantVisitCount > 0) {
+        return false;
+      }
+
+      if (locationFilter === "located" && !hasLocation) {
+        return false;
+      }
+
+      if (locationFilter === "unlocated" && hasLocation) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return [...filteredByOptions].sort((left, right) => {
       const direction = sortDirection === "asc" ? 1 : -1;
       const nameOrder = restaurantNameCollator.compare(left.name, right.name);
 
@@ -169,7 +232,20 @@ export default function RestaurantsPage() {
         direction
       );
     });
-  }, [restaurants, query, sortBy, sortDirection, visits]);
+  }, [
+    locationFilter,
+    query,
+    restaurants,
+    selectedCuisines,
+    selectedFoodTypes,
+    sortBy,
+    sortDirection,
+    visitFilter,
+    visits,
+  ]);
+  const displayedRecentVisits = (
+    recentScope === "mine" ? recentVisits : allRecentVisits
+  ).slice(0, 4);
 
   function visitCount(restaurantId: string) {
     return visits.filter((visit) => visit.restaurant_id === restaurantId).length;
@@ -182,6 +258,19 @@ export default function RestaurantsPage() {
 
     return latest ? new Date(latest.visited_at).getTime() : 0;
   }
+
+  function resetFilters() {
+    setSelectedCuisines([]);
+    setSelectedFoodTypes([]);
+    setVisitFilter("all");
+    setLocationFilter("all");
+  }
+
+  const hasActiveFilters =
+    selectedCuisines.length > 0 ||
+    selectedFoodTypes.length > 0 ||
+    visitFilter !== "all" ||
+    locationFilter !== "all";
 
   function restaurantLabel(restaurantId: string) {
     const restaurant = restaurants.find((item) => item.id === restaurantId);
@@ -282,6 +371,59 @@ export default function RestaurantsPage() {
             </div>
           </div>
 
+          <div className="mt-3 grid max-w-5xl gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_160px_180px_auto]">
+            <MultiSelectField
+              name="cuisineFilter"
+              options={cuisineOptions}
+              value={selectedCuisines}
+              onChange={setSelectedCuisines}
+              placeholder="음식권 전체"
+            />
+            <MultiSelectField
+              name="foodTypeFilter"
+              options={foodTypeOptions}
+              value={selectedFoodTypes}
+              onChange={setSelectedFoodTypes}
+              placeholder="메뉴 유형 전체"
+            />
+            <SelectInput
+              value={visitFilter}
+              onChange={(event) =>
+                setVisitFilter(
+                  event.target.value as (typeof visitFilterOptions)[number]["value"],
+                )
+              }
+            >
+              {visitFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectInput>
+            <SelectInput
+              value={locationFilter}
+              onChange={(event) =>
+                setLocationFilter(
+                  event.target.value as (typeof locationFilterOptions)[number]["value"],
+                )
+              }
+            >
+              {locationFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectInput>
+            <button
+              type="button"
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
+              className="min-h-11 border border-line bg-white px-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:text-ink/30 md:col-span-2 xl:col-span-1"
+            >
+              필터 초기화
+            </button>
+          </div>
+
           {dataLoading ? <LoadingState /> : null}
           {dataError ? <p className="mt-4 text-sm text-red-700">{dataError}</p> : null}
 
@@ -341,7 +483,7 @@ export default function RestaurantsPage() {
               })}
             </div>
 
-            <aside className="order-first grid gap-4 lg:sticky lg:top-5 lg:order-none">
+            <aside className="order-first grid gap-4 lg:sticky lg:top-5 lg:order-none lg:max-h-[calc(100vh-2.5rem)] lg:grid-rows-[auto_minmax(0,1fr)]">
               <section className="border border-line bg-white/60 p-4">
                 <h2 className="text-base font-semibold">식당 위치</h2>
                 <div className="mt-3">
@@ -355,7 +497,7 @@ export default function RestaurantsPage() {
                 </div>
               </section>
 
-              <section className="border border-line bg-white/60 p-4">
+              <section className="flex max-h-[calc(100vh-2rem)] min-h-0 flex-col border border-line bg-white/60 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-base font-semibold">최근 방문</h2>
@@ -387,8 +529,8 @@ export default function RestaurantsPage() {
                     더 보기
                   </Link>
                 </div>
-                <div className="mt-3 grid gap-3">
-                  {(recentScope === "mine" ? recentVisits : allRecentVisits).map((visit) => (
+                <div className="mt-3 grid min-h-0 gap-3 overflow-y-auto pr-1">
+                  {displayedRecentVisits.map((visit) => (
                     <div
                       key={visit.id}
                       className="border border-line bg-white/75 p-3"
@@ -436,7 +578,7 @@ export default function RestaurantsPage() {
                       </div>
                     </div>
                   ))}
-                  {(recentScope === "mine" ? recentVisits : allRecentVisits).length === 0 ? (
+                  {displayedRecentVisits.length === 0 ? (
                     <p className="text-sm text-ink/60">아직 방문 기록이 없습니다.</p>
                   ) : null}
                 </div>

@@ -35,6 +35,10 @@ The main flow is:
 - Keep code and README cleaned up regularly.
 - Keep `docs/maintenance.md` updated when running cleanup, bug detection, or
   structural refactors.
+- On the first MenuDex chat after 6 PM local time each day, perform a maintenance
+  check before or alongside the requested work: read this prompt, review changed
+  files/docs, run the regular checks when feasible, and update
+  `docs/maintenance.md` with any cleanup or bug-detection notes.
 - Cleanup should include reading relevant docs, logging what changed, and
   splitting/deleting files when it makes the code meaningfully cleaner.
 - Preserve original menu photos; never burn highlights into image files.
@@ -58,10 +62,18 @@ The main flow is:
 - Restaurant cards use `n회 방문`, not `방문 n회`.
 - Restaurant list defaults to latest visit sorting. When the user selects name
   sorting, automatically switch to ascending ㄱ-ㅎ order.
+- Restaurant list filters default to broad `전체` behavior. Category option
+  order should follow the shared cuisine/food option lists, and filters should
+  be easy to reset.
+- `/map` defaults to coordinate-enabled restaurants, with search/category filters
+  available before large saved-map imports make the list too dense.
 - `/restaurants` shows a compact recent visits panel with menu names; on mobile
   it appears before the restaurant list, and on desktop it behaves like a side panel.
 - The `/restaurants` recent visits panel shows at most 4 items and links to
   `/visits` with `더 보기`.
+- The `/restaurants` recent visits panel should fit within the vertical window
+  height and scroll internally if needed, while still limiting displayed visits
+  to 4.
 - Recent visits have `내 최근` and `전체 최근` tabs and show which profile visited.
 - Recent visit ordering uses visit date with creation time as the tie-breaker so
   same-day logs reflect actual recent entry order.
@@ -91,6 +103,8 @@ The main flow is:
 - Menu photo upload should support scan-style four-corner cropping before saving.
   The crop should start with the whole image visible, let the user drag the four
   corners, and save a corrected rectangular image.
+- Menu photo add should support selecting multiple photos, cropping them one by
+  one, and saving them in a single submit.
 - Image paste/upload boxes must open the file picker only from the black
   `파일 선택` button. Clicking anywhere else inside the dotted box should only
   focus the paste area so copied images can be pasted.
@@ -134,7 +148,6 @@ The main flow is:
 ## Future Ideas
 
 - See `docs/gamification.md` for broader game-mode brainstorming.
-- Restaurant category filters.
 - Better bulk-data restaurant filtering/sorting before importing large saved-map lists.
 - Decide the default `/restaurants` map behavior for large datasets; likely
   collapsed, filtered, or moved behind a dedicated map tab when restaurant count grows.

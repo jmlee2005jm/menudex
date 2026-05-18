@@ -46,10 +46,10 @@ export async function cropVisibleImage(
   const sourceY = clampSource((visibleTop - renderedTop) / scale, 0, naturalHeight);
   const sourceWidth = Math.min(visibleWidth / scale, naturalWidth - sourceX);
   const sourceHeight = Math.min(visibleHeight / scale, naturalHeight - sourceY);
-  const destinationX = ((visibleLeft - renderedLeft) / renderedWidth) * viewport.outputWidth;
-  const destinationY = ((visibleTop - renderedTop) / renderedHeight) * viewport.outputHeight;
-  const destinationWidth = (visibleWidth / renderedWidth) * viewport.outputWidth;
-  const destinationHeight = (visibleHeight / renderedHeight) * viewport.outputHeight;
+  const destinationX = (visibleLeft / viewport.width) * viewport.outputWidth;
+  const destinationY = (visibleTop / viewport.height) * viewport.outputHeight;
+  const destinationWidth = (visibleWidth / viewport.width) * viewport.outputWidth;
+  const destinationHeight = (visibleHeight / viewport.height) * viewport.outputHeight;
   const canvas = document.createElement("canvas");
   canvas.width = viewport.outputWidth;
   canvas.height = viewport.outputHeight;
