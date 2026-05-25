@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import {
   LoadingState,
   LoginRequired,
@@ -17,9 +17,7 @@ import { useAppSession } from "@/lib/use-app-session";
 export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
   const router = useRouter();
   const { authenticated, loading, configured } = useAppSession();
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [converting, setConverting] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [photoSubmitError, setPhotoSubmitError] = useState("");
   const [photoSubmitting, setPhotoSubmitting] = useState(false);
@@ -27,43 +25,15 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
   const [menuSubmitError, setMenuSubmitError] = useState("");
   const [menuSubmitting, setMenuSubmitting] = useState(false);
 
-  useEffect(
-    () => () => {
-      previewUrls.forEach((url) => URL.revokeObjectURL(url));
-    },
-    [previewUrls],
-  );
-
   async function handleImageFiles(files: File[]) {
     if (files.length === 0) {
-      setPreviewUrls([]);
       setSelectedFiles([]);
       return;
     }
 
     setPhotoError("");
     setPhotoSubmitError("");
-    setConverting(true);
-
-    try {
-      const imageFiles = await Promise.all(
-        files.map((file) => (isHeicFile(file) ? convertHeicToJpeg(file) : file)),
-      );
-      setSelectedFiles(imageFiles);
-      setPreviewUrls((current) => {
-        current.forEach((url) => URL.revokeObjectURL(url));
-        return imageFiles.map((file) => URL.createObjectURL(file));
-      });
-    } catch {
-      setSelectedFiles([]);
-      setPreviewUrls((current) => {
-        current.forEach((url) => URL.revokeObjectURL(url));
-        return [];
-      });
-      setPhotoError("HEIC 사진을 JPEG로 변환하지 못했습니다. 다른 사진을 선택하세요.");
-    } finally {
-      setConverting(false);
-    }
+    setSelectedFiles(files);
   }
 
   async function handlePhotoSubmit(event: FormEvent<HTMLFormElement>) {
@@ -174,35 +144,18 @@ export function NewMenuForm({ restaurantId }: { restaurantId: string }) {
                 name="menuPhoto"
                 accept="image/*,.heic,.heif,image/heic,image/heif"
                 onFiles={handleImageFiles}
+                preprocessFile={preprocessMenuPhotoFile}
                 multiple
                 cropMenuPhoto
               />
             </Field>
-            {converting ? (
-              <p className="text-sm text-ink/60">HEIC 사진을 JPEG로 변환하는 중...</p>
-            ) : null}
-            {previewUrls.length > 0 ? (
-              <div className="grid gap-3 border border-line bg-white/70 p-3 sm:grid-cols-2">
-                {previewUrls.map((previewUrl, index) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    key={previewUrl}
-                    src={previewUrl}
-                    alt={`선택한 메뉴 미리보기 ${index + 1}`}
-                    className="h-auto w-full bg-white object-contain"
-                  />
-                ))}
-              </div>
-            ) : null}
             <Field label="촬영일" required>
               <DateSelectInput name="takenAt" defaultValue={todayDateValue()} />
             </Field>
-            <SubmitButton disabled={converting || photoSubmitting}>
+            <SubmitButton disabled={photoSubmitting}>
               {photoSubmitting
                 ? "저장 중..."
-                : converting
-                  ? "변환 중..."
-                  : selectedFiles.length > 1
+                : selectedFiles.length > 1
                     ? `메뉴 사진 ${selectedFiles.length}장 추가`
                     : "메뉴 사진 추가"}
             </SubmitButton>
@@ -250,6 +203,10 @@ function isHeicFile(file: File) {
     name.endsWith(".heic") ||
     name.endsWith(".heif")
   );
+}
+
+async function preprocessMenuPhotoFile(file: File) {
+  return isHeicFile(file) ? convertHeicToJpeg(file) : file;
 }
 
 async function convertHeicToJpeg(file: File) {

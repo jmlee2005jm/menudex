@@ -159,6 +159,7 @@ export default function NewRestaurantPage() {
               name="initialMenuPhoto"
               accept="image/*,.heic,.heif,image/heic,image/heif"
               onFile={handleInitialMenuFile}
+              preprocessFile={preprocessMenuPhotoFile}
               cropMenuPhoto
             />
           </Field>
@@ -200,6 +201,10 @@ function isHeicFile(file: File) {
     name.endsWith(".heic") ||
     name.endsWith(".heif")
   );
+}
+
+async function preprocessMenuPhotoFile(file: File) {
+  return isHeicFile(file) ? convertHeicToJpeg(file) : file;
 }
 
 async function convertHeicToJpeg(file: File) {

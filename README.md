@@ -14,11 +14,14 @@ Implemented:
 
 - Korean-first UI.
 - `/` redirects to `/profiles`.
+- `/` redirects to `/restaurants` when a profile session already exists.
 - Switch-style profile selection with a signed HttpOnly session cookie.
 - Supabase-backed restaurant list and restaurant creation.
 - Supabase-backed manual menu item creation.
 - Supabase Storage upload for menu photos.
 - HEIC/HEIF menu photos are converted to JPEG in the browser before upload.
+- HEIC/HEIF menu photos are converted before the crop UI opens, so desktop HEIC
+  files can be cropped instead of failing preview.
 - Menu photo uploads use a scan-style four-corner crop before saving, so angled
   menu photos can be corrected into a rectangular image.
 - After confirming a crop, the selected image can be reopened for another crop
@@ -28,6 +31,8 @@ Implemented:
 - Menu photo upload and optional manual menu entry share one `메뉴 추가` screen.
 - `메뉴 추가` can select multiple menu photos, crop them one by one, and save
   them in a single request.
+- Cropped menu-photo batches show removable thumbnails before final submit, and
+  canceling a crop skips only the current photo.
 - Supabase-backed visit logging with meal type, one or more tried menus,
   half-star ratings, and optional short reviews.
 - Optional food photos are stored separately from menu photos and attached to
@@ -67,7 +72,8 @@ Implemented:
   arrow button for direction.
 - Restaurant list can filter by cuisine category, food type, visit status, and
   map-location status. Filter defaults are intentionally broad so the existing
-  list remains unchanged until the user chooses a filter.
+  list remains unchanged until the user chooses a filter. Filters are collapsed
+  by default to keep the list compact.
 - `/restaurants` shows a compact recent visits panel with up to 4 visits and a
   `더 보기` link to `/visits`.
 - The recent visits panel is height-limited inside the viewport and scrolls
@@ -199,6 +205,8 @@ restart the Next.js dev server.
 - Restaurant address and external map links are intentionally omitted from the UI.
 - Kakao Maps location selection uses place search first, with map-click pinning
   as the fallback.
+- New restaurant location maps default to the user's current location when the
+  browser grants geolocation, but do not auto-save coordinates.
 - Restaurant cards show visit count and latest visit instead of menu coverage.
 - Restaurant cards show `해금된 메뉴 x/y`, where `x` is the selected profile's
   unique tried menu names and `y` is the restaurant's optional `목표 메뉴 수`.

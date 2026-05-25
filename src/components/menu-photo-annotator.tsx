@@ -30,6 +30,7 @@ export function MenuPhotoAnnotator({
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<DraftRect>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [highlightSaving, setHighlightSaving] = useState(false);
   const [error, setError] = useState("");
 
   const sortedAnnotations = useMemo(
@@ -88,11 +89,12 @@ export function MenuPhotoAnnotator({
   }
 
   async function confirmHighlight() {
-    if (!draft) {
+    if (!draft || highlightSaving) {
       return;
     }
 
     setError("");
+    setHighlightSaving(true);
     const response = await fetch(
       `/api/restaurants/${restaurantId}/menu-photos/${photo.id}/annotations`,
       {
@@ -111,6 +113,7 @@ export function MenuPhotoAnnotator({
     if (!response.ok || !data.annotation) {
       setError(data.error ?? "하이라이트를 저장하지 못했습니다.");
       setDraft(null);
+      setHighlightSaving(false);
       return;
     }
 
@@ -122,6 +125,7 @@ export function MenuPhotoAnnotator({
     clearCachedJson(`/api/restaurants/${restaurantId}`);
     setDraft(null);
     setAdding(false);
+    setHighlightSaving(false);
   }
 
   function cancelHighlight() {
@@ -232,17 +236,18 @@ export function MenuPhotoAnnotator({
             <button
               type="button"
               onClick={confirmHighlight}
-              disabled={!draft}
-              className="min-h-10 bg-ink px-3 text-sm font-medium text-white disabled:bg-ink/35"
+              disabled={!draft || highlightSaving}
+              className="min-h-11 bg-leaf px-4 text-sm font-semibold text-white disabled:bg-leaf/35"
             >
-              확인
+              {highlightSaving ? "저장 중..." : draft ? "하이라이트 저장" : "영역 선택 후 저장"}
             </button>
             <button
               type="button"
               onClick={cancelHighlight}
-              className="min-h-10 border border-line bg-white px-3 text-sm font-medium text-ink"
+              disabled={highlightSaving}
+              className="min-h-11 border border-line bg-white px-3 text-sm font-medium text-ink disabled:text-ink/35"
             >
-              하이라이트 취소
+              선택 취소
             </button>
           </>
         ) : (

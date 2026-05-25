@@ -1,5 +1,6 @@
 "use client";
 
+import { SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -99,6 +100,7 @@ export default function RestaurantsPage() {
     useState<(typeof visitFilterOptions)[number]["value"]>("all");
   const [locationFilter, setLocationFilter] =
     useState<(typeof locationFilterOptions)[number]["value"]>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState("");
   const [lightboxPhotoUrl, setLightboxPhotoUrl] = useState("");
@@ -271,6 +273,11 @@ export default function RestaurantsPage() {
     selectedFoodTypes.length > 0 ||
     visitFilter !== "all" ||
     locationFilter !== "all";
+  const activeFilterCount =
+    selectedCuisines.length +
+    selectedFoodTypes.length +
+    (visitFilter !== "all" ? 1 : 0) +
+    (locationFilter !== "all" ? 1 : 0);
 
   function restaurantLabel(restaurantId: string) {
     const restaurant = restaurants.find((item) => item.id === restaurantId);
@@ -334,14 +341,14 @@ export default function RestaurantsPage() {
       {configured && !loading && !authenticated ? <LoginRequired /> : null}
       {configured && authenticated ? (
         <>
-          <div className="mt-6 grid max-w-3xl gap-3 sm:grid-cols-[1fr_180px_44px]">
+          <div className="mt-6 grid max-w-4xl gap-3 sm:grid-cols-[1fr_180px_44px_auto]">
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="식당 검색"
               className="min-h-12 w-full border border-line bg-white px-3 text-base outline-none focus:border-leaf"
             />
-            <div className="grid grid-cols-[1fr_44px] gap-3 sm:contents">
+            <div className="grid grid-cols-[1fr_44px_44px] gap-3 sm:contents">
               <SelectInput
                 value={sortBy}
                 onChange={(event) => {
@@ -368,61 +375,81 @@ export default function RestaurantsPage() {
               >
                 {sortDirection === "desc" ? "↓" : "↑"}
               </button>
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((current) => !current)}
+                aria-label={filtersOpen ? "필터 닫기" : "필터 열기"}
+                title={filtersOpen ? "필터 닫기" : "필터 열기"}
+                className={`relative inline-flex min-h-11 w-11 items-center justify-center border ${
+                  filtersOpen || hasActiveFilters
+                    ? "border-leaf bg-white text-leaf"
+                    : "border-line bg-white text-ink"
+                }`}
+              >
+                <SlidersHorizontal size={19} strokeWidth={2.2} aria-hidden="true" />
+                {activeFilterCount > 0 ? (
+                  <span className="absolute right-0 top-0 grid h-4 min-w-4 translate-x-1/3 -translate-y-1/3 place-items-center bg-leaf px-1 text-[10px] font-semibold leading-none text-white">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </button>
             </div>
           </div>
 
-          <div className="mt-3 grid max-w-5xl gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_160px_180px_auto]">
-            <MultiSelectField
-              name="cuisineFilter"
-              options={cuisineOptions}
-              value={selectedCuisines}
-              onChange={setSelectedCuisines}
-              placeholder="음식권 전체"
-            />
-            <MultiSelectField
-              name="foodTypeFilter"
-              options={foodTypeOptions}
-              value={selectedFoodTypes}
-              onChange={setSelectedFoodTypes}
-              placeholder="메뉴 유형 전체"
-            />
-            <SelectInput
-              value={visitFilter}
-              onChange={(event) =>
-                setVisitFilter(
-                  event.target.value as (typeof visitFilterOptions)[number]["value"],
-                )
-              }
-            >
-              {visitFilterOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </SelectInput>
-            <SelectInput
-              value={locationFilter}
-              onChange={(event) =>
-                setLocationFilter(
-                  event.target.value as (typeof locationFilterOptions)[number]["value"],
-                )
-              }
-            >
-              {locationFilterOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </SelectInput>
-            <button
-              type="button"
-              onClick={resetFilters}
-              disabled={!hasActiveFilters}
-              className="min-h-11 border border-line bg-white px-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:text-ink/30 md:col-span-2 xl:col-span-1"
-            >
-              필터 초기화
-            </button>
-          </div>
+          {filtersOpen ? (
+            <div className="mt-3 grid max-w-5xl gap-3 border border-line bg-white/60 p-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_160px_180px_auto]">
+              <MultiSelectField
+                name="cuisineFilter"
+                options={cuisineOptions}
+                value={selectedCuisines}
+                onChange={setSelectedCuisines}
+                placeholder="음식권 전체"
+              />
+              <MultiSelectField
+                name="foodTypeFilter"
+                options={foodTypeOptions}
+                value={selectedFoodTypes}
+                onChange={setSelectedFoodTypes}
+                placeholder="메뉴 유형 전체"
+              />
+              <SelectInput
+                value={visitFilter}
+                onChange={(event) =>
+                  setVisitFilter(
+                    event.target.value as (typeof visitFilterOptions)[number]["value"],
+                  )
+                }
+              >
+                {visitFilterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </SelectInput>
+              <SelectInput
+                value={locationFilter}
+                onChange={(event) =>
+                  setLocationFilter(
+                    event.target.value as (typeof locationFilterOptions)[number]["value"],
+                  )
+                }
+              >
+                {locationFilterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </SelectInput>
+              <button
+                type="button"
+                onClick={resetFilters}
+                disabled={!hasActiveFilters}
+                className="min-h-11 border border-line bg-white px-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:text-ink/30 md:col-span-2 xl:col-span-1"
+              >
+                필터 초기화
+              </button>
+            </div>
+          ) : null}
 
           {dataLoading ? <LoadingState /> : null}
           {dataError ? <p className="mt-4 text-sm text-red-700">{dataError}</p> : null}

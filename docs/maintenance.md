@@ -5,6 +5,9 @@ the same constraints and avoid rediscovering known issues.
 
 ## 2026-05-18 Cleanup Pass
 
+- Performed the first-after-6-PM maintenance check at 20:01 KST: read
+  `MENUDEX_PROMPT.md`, reviewed this maintenance log, and checked the worktree
+  before implementing the requested change.
 - Ran whitespace check with `git diff --check`.
 - Ran `npm run typecheck`.
 - Ran `npm run lint`.
@@ -34,6 +37,15 @@ the same constraints and avoid rediscovering known issues.
   `/map`.
 - Extended menu photo upload so multiple cropped photos can be saved in one
   submit, with API cleanup if any storage or database step fails.
+- Updated multi-photo menu upload so canceling a crop skips only the current
+  photo and cropped photos remain individually removable before final submit.
+- Applied UX pass from Korean user notes: collapsed restaurant filters, closer
+  restaurant-detail map zoom, clearer highlight save/cancel controls, larger
+  mobile crop handles, and current-location default for new location picker.
+- Fixed desktop HEIC menu-photo flow by converting HEIC/HEIF before opening the
+  crop UI, and adjusted restaurant filter button weight for mobile/desktop.
+- Updated root routing so `/` sends existing profile sessions to `/restaurants`
+  and new/no-session users to `/profiles`.
 
 ## Regular Checklist
 

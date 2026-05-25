@@ -65,6 +65,7 @@ function RestaurantLocationCard({
             restaurants={[restaurant]}
             heightClassName="h-48 min-h-48 sm:h-56"
             showRestaurantList={false}
+            level={4}
           />
         ) : (
           <p className="text-sm text-ink/60">

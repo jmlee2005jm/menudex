@@ -30,6 +30,8 @@ The main flow is:
 - UI should feel personal and app-like, not corporate/company-style.
 - Do not add a marketing landing page.
 - The first screen is profile selection.
+- Root `/` should redirect to `/restaurants` when a valid profile session exists,
+  otherwise `/profiles`.
 - Use mobile-first layouts and verify PC/mobile suitability after UI changes.
 - Always verify the web app after changes with typecheck, lint, build, and smoke test when feasible.
 - Keep code and README cleaned up regularly.
@@ -64,7 +66,7 @@ The main flow is:
   sorting, automatically switch to ascending ㄱ-ㅎ order.
 - Restaurant list filters default to broad `전체` behavior. Category option
   order should follow the shared cuisine/food option lists, and filters should
-  be easy to reset.
+  be easy to reset. Keep filters collapsed by default to avoid clutter.
 - `/map` defaults to coordinate-enabled restaurants, with search/category filters
   available before large saved-map imports make the list too dense.
 - `/restaurants` shows a compact recent visits panel with menu names; on mobile
@@ -103,8 +105,13 @@ The main flow is:
 - Menu photo upload should support scan-style four-corner cropping before saving.
   The crop should start with the whole image visible, let the user drag the four
   corners, and save a corrected rectangular image.
+- HEIC/HEIF menu photos must convert before the crop UI opens because desktop
+  browsers often cannot render HEIC object URLs directly.
 - Menu photo add should support selecting multiple photos, cropping them one by
   one, and saving them in a single submit.
+- In multi-photo menu upload, each selected/cropped photo must remain removable
+  before final submit; canceling during crop should skip only the current photo,
+  not wipe the whole batch.
 - Image paste/upload boxes must open the file picker only from the black
   `파일 선택` button. Clicking anywhere else inside the dotted box should only
   focus the paste area so copied images can be pasted.
@@ -131,6 +138,8 @@ The main flow is:
   map-click pinning as the fallback. Do not make manual lat/lng entry the main UI.
 - Do not show raw latitude/longitude values while selecting restaurant location;
   only show the selected place/pin label.
+- When adding a restaurant location, default the picker map to the user's current
+  location when browser geolocation is available, without auto-saving coordinates.
 - Menu photo adding and manual menu adding live under one `메뉴 추가` screen.
 - Restaurant creation can optionally include an initial menu photo so the user
   does not need to open a second page immediately.
@@ -158,3 +167,6 @@ The main flow is:
 - Repeated visits to the same restaurant should increase that profile color intensity.
 - Map view modes may later include selected profile, all profiles, or dominant visitor.
 - Kakao map clustering/filtering for many restaurant markers.
+- Nearby unsaved restaurant display is possible through Kakao Local/category
+  search, but needs UX choice: show in location picker, main map, or separate
+  discovery view.

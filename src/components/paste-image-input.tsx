@@ -26,6 +26,7 @@ export function PasteImageInput({
   name,
   onFile,
   onFiles,
+  preprocessFile,
   accept = "image/*",
   multiple = false,
   compact = false,
@@ -37,6 +38,7 @@ export function PasteImageInput({
   name: string;
   onFile?: (file: File) => void;
   onFiles?: (files: File[]) => void;
+  preprocessFile?: (file: File) => Promise<File>;
   accept?: string;
   multiple?: boolean;
   compact?: boolean;
@@ -49,10 +51,13 @@ export function PasteImageInput({
   const cropImageRef = useRef<HTMLImageElement | null>(null);
   const [fileName, setFileName] = useState("");
   const [committedFiles, setCommittedFiles] = useState<File[]>([]);
+  const [committedPreviews, setCommittedPreviews] = useState<string[]>([]);
   const [previewUrl, setPreviewUrl] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [fileError, setFileError] = useState("");
   const previewUrlRef = useRef("");
   const committedFilesRef = useRef<File[]>([]);
+  const committedPreviewsRef = useRef<string[]>([]);
   const cropQueueRef = useRef<File[]>([]);
   const originalCropSourceRef = useRef<{
     file: File;
@@ -86,6 +91,10 @@ export function PasteImageInput({
   }, [committedFiles]);
 
   useEffect(() => {
+    committedPreviewsRef.current = committedPreviews;
+  }, [committedPreviews]);
+
+  useEffect(() => {
     originalCropSourceRef.current = originalCropSource;
   }, [originalCropSource]);
 
@@ -98,6 +107,8 @@ export function PasteImageInput({
       if (originalCropSourceRef.current) {
         URL.revokeObjectURL(originalCropSourceRef.current.url);
       }
+
+      committedPreviewsRef.current.forEach((url) => URL.revokeObjectURL(url));
     },
     [],
   );
@@ -128,7 +139,24 @@ export function PasteImageInput({
   }
 
   async function acceptFiles(files: File[]) {
-    const [firstFile, ...queuedFiles] = files;
+    setFileError("");
+    let preparedFiles = files;
+
+    if (preprocessFile) {
+      setProcessing(true);
+
+      try {
+        preparedFiles = await Promise.all(files.map((file) => preprocessFile(file)));
+      } catch {
+        setFileError("사진을 변환하지 못했습니다. 다른 파일을 선택하세요.");
+        setProcessing(false);
+        return;
+      }
+
+      setProcessing(false);
+    }
+
+    const [firstFile, ...queuedFiles] = preparedFiles;
 
     if (!firstFile) {
       return;
@@ -175,6 +203,9 @@ export function PasteImageInput({
       setFileName("");
       committedFilesRef.current = [];
       setCommittedFiles([]);
+      committedPreviewsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      committedPreviewsRef.current = [];
+      setCommittedPreviews([]);
       syncInputFiles([]);
       setPreviewUrl((current) => {
         if (current) {
@@ -192,6 +223,11 @@ export function PasteImageInput({
     setCommittedFiles(nextFiles);
     syncInputFiles(nextFiles);
     setFileName(multiple ? `${nextFiles.length}개 선택됨` : file.name);
+    if (multiple) {
+      const nextPreviewUrl = URL.createObjectURL(file);
+      committedPreviewsRef.current = [...committedPreviewsRef.current, nextPreviewUrl];
+      setCommittedPreviews(committedPreviewsRef.current);
+    }
     setPreviewUrl((current) => {
       if (current) {
         URL.revokeObjectURL(current);
@@ -200,6 +236,26 @@ export function PasteImageInput({
       return preview && !multiple ? URL.createObjectURL(file) : "";
     });
     onFile?.(file);
+    onFiles?.(nextFiles);
+  }
+
+  function removeCommittedFile(index: number) {
+    const nextFiles = committedFilesRef.current.filter((_, fileIndex) => fileIndex !== index);
+    const [removedPreview] = committedPreviewsRef.current.slice(index, index + 1);
+    const nextPreviews = committedPreviewsRef.current.filter(
+      (_, previewIndex) => previewIndex !== index,
+    );
+
+    if (removedPreview) {
+      URL.revokeObjectURL(removedPreview);
+    }
+
+    committedFilesRef.current = nextFiles;
+    committedPreviewsRef.current = nextPreviews;
+    setCommittedFiles(nextFiles);
+    setCommittedPreviews(nextPreviews);
+    syncInputFiles(nextFiles);
+    setFileName(nextFiles.length > 0 ? `${nextFiles.length}개 선택됨` : "");
     onFiles?.(nextFiles);
   }
 
@@ -252,13 +308,23 @@ export function PasteImageInput({
   }
 
   function cancelCrop() {
-    cropQueueRef.current = [];
+    const nextQueuedFile = multiple ? cropQueueRef.current.shift() : undefined;
 
     if (!fileName && originalCropSource) {
       URL.revokeObjectURL(originalCropSource.url);
       setOriginalCropSource(null);
     }
 
+    if (cropSource && !originalCropSourceRef.current) {
+      URL.revokeObjectURL(cropSource.url);
+    }
+
+    if (nextQueuedFile) {
+      openCropSource(nextQueuedFile, false);
+      return;
+    }
+
+    cropQueueRef.current = [];
     setCropSource(null);
     setNaturalSize(null);
     setScanCorners(null);
@@ -380,7 +446,8 @@ export function PasteImageInput({
       <p className="text-sm text-ink/55">
         파일을 선택하거나 이미지를 붙여넣기 하세요.
       </p>
-      {processing ? <p className="text-sm text-ink/60">사진을 자르는 중...</p> : null}
+      {processing ? <p className="text-sm text-ink/60">사진을 처리하는 중...</p> : null}
+      {fileError ? <p className="text-sm text-red-700">{fileError}</p> : null}
       {cropSource ? (
         <div className="grid gap-3">
           <div
@@ -461,7 +528,7 @@ export function PasteImageInput({
                     onPointerDown={(event) =>
                       startCornerDrag(event, corner as keyof ScanCorners)
                     }
-                    className="absolute h-7 w-7 rounded-full border-2 border-yellow-500 bg-white shadow"
+                    className="absolute h-10 w-10 rounded-full border-2 border-yellow-500 bg-white shadow sm:h-7 sm:w-7"
                     style={{
                       left: point.x,
                       top: point.y,
@@ -515,9 +582,32 @@ export function PasteImageInput({
               onClick={cancelCrop}
               className="min-h-10 border border-line bg-white px-3 text-sm font-medium text-ink"
             >
-              취소
+              {multiple && cropQueueRef.current.length > 0 ? "이 사진 건너뛰기" : "취소"}
             </button>
           </div>
+        </div>
+      ) : null}
+      {multiple && committedPreviews.length > 0 ? (
+        <div className="flex max-w-full gap-2 overflow-x-auto">
+          {committedPreviews.map((url, index) => (
+            <div key={url} className="relative shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`선택한 이미지 ${index + 1}`}
+                className="h-16 w-16 border border-line bg-white object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => removeCommittedFile(index)}
+                className="absolute right-0 top-0 grid h-6 w-6 translate-x-1/3 -translate-y-1/3 place-items-center bg-ink text-sm font-medium leading-none text-white"
+                aria-label="사진 선택 취소"
+                title="사진 선택 취소"
+              >
+                ×
+              </button>
+            </div>
+          ))}
         </div>
       ) : null}
       {preview && (previewUrl || currentPreviewUrl) ? (

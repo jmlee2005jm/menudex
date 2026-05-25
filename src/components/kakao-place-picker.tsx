@@ -54,6 +54,10 @@ export function KakaoPlacePicker({
   const [places, setPlaces] = useState<PlaceResult[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [searchMessage, setSearchMessage] = useState("");
+  const [currentLocation, setCurrentLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [selected, setSelected] = useState<SelectedLocation>({
     latitude: defaultLatitude ?? null,
     longitude: defaultLongitude ?? null,
@@ -62,6 +66,29 @@ export function KakaoPlacePicker({
         ? "저장된 위치"
         : "",
   });
+
+  useEffect(() => {
+    if (
+      typeof defaultLatitude === "number" ||
+      typeof defaultLongitude === "number" ||
+      !navigator.geolocation
+    ) {
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      () => {
+        setCurrentLocation(null);
+      },
+      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 5_000 },
+    );
+  }, [defaultLatitude, defaultLongitude]);
 
   useEffect(() => {
     if (!appKey || !mapRef.current) {
@@ -92,12 +119,14 @@ export function KakaoPlacePicker({
           return;
         }
 
-        const latitude = defaultLatitude ?? DEFAULT_CENTER.latitude;
-        const longitude = defaultLongitude ?? DEFAULT_CENTER.longitude;
+        const latitude =
+          defaultLatitude ?? currentLocation?.latitude ?? DEFAULT_CENTER.latitude;
+        const longitude =
+          defaultLongitude ?? currentLocation?.longitude ?? DEFAULT_CENTER.longitude;
         const center = new window.kakao.maps.LatLng(latitude, longitude);
         const map = new window.kakao.maps.Map(mapRef.current, {
           center,
-          level: defaultLatitude && defaultLongitude ? 3 : 7,
+          level: defaultLatitude && defaultLongitude ? 3 : currentLocation ? 4 : 7,
         });
         mapInstanceRef.current = map;
 
@@ -122,7 +151,7 @@ export function KakaoPlacePicker({
     return () => {
       cancelled = true;
     };
-  }, [appKey, defaultLatitude, defaultLongitude]);
+  }, [appKey, currentLocation, defaultLatitude, defaultLongitude]);
 
   function selectCoordinates(latitude: number, longitude: number, label: string) {
     setSelected({ latitude, longitude, label });
