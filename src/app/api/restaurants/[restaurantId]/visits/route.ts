@@ -24,13 +24,6 @@ export async function POST(
     );
   }
 
-  if (menuEntries.some((entry) => !entry.rating)) {
-    return NextResponse.json(
-      { error: "별점을 선택하세요." },
-      { status: 400 },
-    );
-  }
-
   const supabase = createAdminClient();
   const ownsRestaurant = await assertRestaurantOwner(
     supabase,
@@ -67,7 +60,7 @@ export async function POST(
       menuEntries.map((entry) => ({
         visit_id: visit.id,
         manual_menu_name: entry.menuName,
-        rating: Number(entry.rating),
+        rating: entry.rating ? Number(entry.rating) : null,
         review: entry.review || null,
       })),
     )
@@ -251,13 +244,6 @@ export async function PATCH(
     );
   }
 
-  if (!rating) {
-    return NextResponse.json(
-      { error: "별점을 선택하세요." },
-      { status: 400 },
-    );
-  }
-
   const supabase = createAdminClient();
   const ownsRestaurant = await assertRestaurantOwner(
     supabase,
@@ -293,7 +279,7 @@ export async function PATCH(
     .from("visit_menu_items")
     .update({
       manual_menu_name: menuName,
-      rating: Number(rating),
+      rating: rating ? Number(rating) : null,
       review: String(form.get("review") ?? "").trim() || null,
     })
     .eq("id", visitMenuItemId)

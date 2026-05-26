@@ -90,7 +90,9 @@ The main flow is:
 - Date inputs should default to the current date.
 - Visit logging includes meal type with time-based default.
 - A single visit can include multiple eaten menu rows.
-- Ratings are mandatory for visit menu entries and use half-star units.
+- Visit menu ratings are optional at first because the user may log the menu
+  before eating. Missing ratings become `평가 대기` items and must stand out in
+  the UI. Rating input uses half-star units.
 - Food photos are optional and separate from menu photos.
 - Food photos should attach to each tried menu row, not only to the overall visit,
   so multiple menus in one visit do not share the wrong photos.

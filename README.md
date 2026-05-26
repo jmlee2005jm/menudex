@@ -34,7 +34,9 @@ Implemented:
 - Cropped menu-photo batches show removable thumbnails before final submit, and
   canceling a crop skips only the current photo.
 - Supabase-backed visit logging with meal type, one or more tried menus,
-  half-star ratings, and optional short reviews.
+  optional half-star ratings, and optional short reviews.
+- Visit menu entries without ratings are treated as `평가 대기` and are shown
+  prominently in the restaurant list reminder, recent visits, and restaurant detail.
 - Optional food photos are stored separately from menu photos and attached to
   individual tried menus inside a visit.
 - New visit logging accepts separate photo inputs per menu row.

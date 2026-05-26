@@ -28,7 +28,6 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
   const { authenticated, loading, configured } = useAppSession();
   const [menuNameError, setMenuNameError] = useState("");
   const [menuRows, setMenuRows] = useState([{ id: crypto.randomUUID(), rating: "" }]);
-  const [ratingError, setRatingError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [photoPreviews, setPhotoPreviews] = useState<Record<string, string[]>>({});
@@ -56,7 +55,6 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
 
     const form = new FormData(event.currentTarget);
     const menuNames = form.getAll("menuName").map((value) => String(value).trim());
-    const ratings = form.getAll("rating").map((value) => String(value).trim());
     const hasMenuName = menuNames.some(Boolean);
 
     if (!hasMenuName) {
@@ -64,14 +62,7 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
-    if (menuNames.some((menuName, index) => menuName && !ratings[index])) {
-      setMenuNameError("");
-      setRatingError("별점을 선택하세요.");
-      return;
-    }
-
     setMenuNameError("");
-    setRatingError("");
     setSubmitError("");
     setSubmitting(true);
 
@@ -100,7 +91,6 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
     setMenuRows((current) =>
       current.map((row) => (row.id === rowId ? { ...row, rating } : row)),
     );
-    setRatingError("");
   }
 
   function addMenuRow() {
@@ -155,7 +145,7 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
               <option value="other">기타</option>
             </SelectInput>
           </Field>
-          <Field label="먹은 메뉴" required error={menuNameError || ratingError}>
+          <Field label="먹은 메뉴" required error={menuNameError}>
             <div className="grid gap-3">
               {menuRows.map((row, index) => (
                 <div key={row.id} className="grid gap-3 border border-line bg-white/60 p-3">
@@ -178,6 +168,9 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
                     value={row.rating}
                     onChange={(nextRating) => updateRating(row.id, nextRating)}
                   />
+                  <p className="text-sm font-semibold text-leaf">
+                    별점은 나중에 남겨도 됩니다.
+                  </p>
                   <TextInput name="review" placeholder="짧은 리뷰" />
                   <div>
                     <p className="text-sm font-medium text-ink/70">메뉴 사진</p>

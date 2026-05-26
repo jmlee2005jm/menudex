@@ -154,7 +154,7 @@ export default function VisitsPage() {
                     key={`${visit.id}-${index}`}
                     className="grid gap-2 border-t border-line pt-2 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                   >
-                    <div className="flex min-w-0 items-start gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       {visitPhotoUrlForMenu(visit, item.id) ? (
                         <button
                           type="button"
@@ -173,7 +173,14 @@ export default function VisitsPage() {
                         </button>
                       ) : null}
                       <div className="min-w-0">
-                        <p className="truncate font-medium">{menuName(item)}</p>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <p className="truncate font-medium">{menuName(item)}</p>
+                          {!item.rating ? (
+                            <span className="shrink-0 bg-yellow-300 px-2 py-1 text-xs font-bold text-ink shadow-[0_0_0_2px_rgba(234,179,8,0.25)]">
+                              평가 대기
+                            </span>
+                          ) : null}
+                        </div>
                         {item.review ? (
                           <p className="mt-1 break-words text-sm text-ink/65">
                             {item.review}

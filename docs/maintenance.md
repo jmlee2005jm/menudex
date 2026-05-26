@@ -3,6 +3,16 @@
 This file records cleanup and bug-detection passes so future work can preserve
 the same constraints and avoid rediscovering known issues.
 
+## 2026-05-26 Cleanup Pass
+
+- Performed the first-after-6-PM maintenance check at 20:00 KST: read
+  `MENUDEX_PROMPT.md`, reviewed this maintenance log, and checked the worktree
+  before implementing the requested change.
+- Changed visit logging toward the two-step flow: ratings are optional when
+  logging a menu, and missing ratings become prominent `평가 대기` items.
+- Added pending review visibility on `/restaurants`, recent visits, `/visits`,
+  and restaurant detail.
+
 ## 2026-05-18 Cleanup Pass
 
 - Performed the first-after-6-PM maintenance check at 20:01 KST: read

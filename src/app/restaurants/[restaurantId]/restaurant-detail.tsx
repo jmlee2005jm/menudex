@@ -321,11 +321,6 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
-    if (!rating) {
-      setEditError("별점을 선택하세요.");
-      return;
-    }
-
     setEditError("");
     setEditSubmitting(true);
     form.set("visitId", visit.visitId);
@@ -367,7 +362,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
               ? {
                   ...item,
                   manual_menu_name: menuName,
-                  rating: Number(rating),
+                  rating: rating ? Number(rating) : null,
                   review: String(form.get("review") ?? "").trim() || null,
                 }
               : item,
@@ -513,7 +508,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                         <Field label="먹은 메뉴" required>
                           <TextInput name="menuName" defaultValue={visit.menuName} />
                         </Field>
-                        <Field label="별점" required>
+                        <Field label="별점">
                           <RatingField
                             name="rating"
                             value={editingRating}
@@ -576,6 +571,7 @@ export function RestaurantDetail({ restaurantId }: { restaurantId: string }) {
                         <div className="flex min-w-0 flex-col justify-center">
                           <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1">
                             <p className="break-words font-medium leading-tight">{visit.menuName}</p>
+                            {!visit.rating ? <PendingReviewBadge /> : null}
                             <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-tight text-ink/60">
                               <span className="hidden sm:inline">·</span>
                               <span>{visit.visitedAt}</span>
@@ -758,8 +754,8 @@ function VisitPhotoSlot({
           className="h-14 w-14 border border-line bg-white object-cover"
         />
       </button>
-    );
-  }
+  );
+}
 
   if (canAddPhoto) {
     return (
@@ -775,4 +771,12 @@ function VisitPhotoSlot({
   }
 
   return <div className="h-14 w-14 shrink-0 border border-dashed border-line bg-white/40" />;
+}
+
+function PendingReviewBadge() {
+  return (
+    <span className="inline-flex min-h-7 items-center justify-center bg-yellow-300 px-2 text-xs font-bold text-ink shadow-[0_0_0_2px_rgba(234,179,8,0.35)]">
+      평가 대기
+    </span>
+  );
 }

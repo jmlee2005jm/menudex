@@ -91,6 +91,7 @@ export default function RestaurantsPage() {
   const [allRecentVisits, setAllRecentVisits] = useState<RecentVisit[]>([]);
   const [recentScope, setRecentScope] = useState<"mine" | "all">("mine");
   const [unlockedMenuCounts, setUnlockedMenuCounts] = useState<Record<string, number>>({});
+  const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "lastVisit" | "visitCount">("lastVisit");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
@@ -119,6 +120,7 @@ export default function RestaurantsPage() {
       const data = await getCachedJson<{
         restaurants?: RestaurantRow[];
         unlockedMenuCounts?: Record<string, number>;
+        pendingReviewCount?: number;
         recentVisits?: RecentVisit[];
         allRecentVisits?: RecentVisit[];
         visits?: RestaurantListVisit[];
@@ -137,6 +139,7 @@ export default function RestaurantsPage() {
 
       setRestaurants(data.restaurants ?? []);
       setUnlockedMenuCounts(data.unlockedMenuCounts ?? {});
+      setPendingReviewCount(data.pendingReviewCount ?? 0);
       setRecentVisits(data.recentVisits ?? []);
       setAllRecentVisits(data.allRecentVisits ?? []);
       setVisits(data.visits ?? []);
@@ -451,6 +454,16 @@ export default function RestaurantsPage() {
             </div>
           ) : null}
 
+          {pendingReviewCount > 0 ? (
+            <Link
+              href="/visits"
+              className="mt-4 flex items-center justify-between gap-3 border-2 border-yellow-400 bg-yellow-200 px-4 py-3 text-ink shadow-[0_0_0_3px_rgba(250,204,21,0.25)]"
+            >
+              <span className="font-bold">평가 대기 {pendingReviewCount}개</span>
+              <span className="text-sm font-semibold underline">별점 남기기</span>
+            </Link>
+          ) : null}
+
           {dataLoading ? <LoadingState /> : null}
           {dataError ? <p className="mt-4 text-sm text-red-700">{dataError}</p> : null}
 
@@ -598,6 +611,11 @@ export default function RestaurantsPage() {
                                 </button>
                               ) : null}
                               <span className="truncate">{menuName(item)}</span>
+                              {!item.rating ? (
+                                <span className="shrink-0 bg-yellow-300 px-1.5 py-0.5 text-xs font-bold text-ink">
+                                  평가 대기
+                                </span>
+                              ) : null}
                             </div>
                             <RatingDisplay value={item.rating} />
                           </div>

@@ -32,7 +32,7 @@ export async function GET() {
         .eq("profile_id", auth.session.profileId),
       supabase
         .from("visits")
-        .select("restaurant_id, visit_menu_items(manual_menu_name, menu_items(name))")
+        .select("restaurant_id, visit_menu_items(manual_menu_name, rating, menu_items(name))")
         .eq("user_id", ownerId)
         .eq("profile_id", auth.session.profileId),
       supabase
@@ -76,10 +76,26 @@ export async function GET() {
   return NextResponse.json({
     restaurants,
     unlockedMenuCounts: countUnlockedMenusByRestaurant(unlockedMenusResult.data ?? []),
+    pendingReviewCount: countPendingReviews(unlockedMenusResult.data ?? []),
     recentVisits: await addSignedVisitPhotoUrls(supabase, recentVisitsResult.data ?? []),
     allRecentVisits: await addSignedVisitPhotoUrls(supabase, allRecentVisitsResult.data ?? []),
     visits: visitsResult.data ?? [],
   });
+}
+
+function countPendingReviews(
+  visits: Array<{
+    visit_menu_items?: Array<{ manual_menu_name: string | null; rating: number | null }>;
+  }>,
+) {
+  return visits.reduce(
+    (count, visit) =>
+      count +
+      (visit.visit_menu_items ?? []).filter(
+        (item) => item.manual_menu_name && item.rating === null,
+      ).length,
+    0,
+  );
 }
 
 async function addSignedVisitPhotoUrls<
