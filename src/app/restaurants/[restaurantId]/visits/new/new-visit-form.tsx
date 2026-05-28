@@ -16,11 +16,12 @@ import {
 } from "@/components/form-fields";
 import { PageShell, SecondaryLink } from "@/components/page-shell";
 import { RatingField } from "@/components/rating-field";
-import { clearCachedJson } from "@/lib/client-cache";
+import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
 import {
   defaultMealType,
   todayDateValue,
 } from "@/lib/date";
+import type { MenuPhotoRow } from "@/lib/supabase/types";
 import { useAppSession } from "@/lib/use-app-session";
 
 export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
@@ -31,6 +32,7 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [photoPreviews, setPhotoPreviews] = useState<Record<string, string[]>>({});
+  const [menuPhotos, setMenuPhotos] = useState<MenuPhotoRow[]>([]);
   const photoPreviewsRef = useRef(photoPreviews);
 
   useEffect(() => {
@@ -45,6 +47,34 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!authenticated) {
+      return;
+    }
+
+    let mounted = true;
+
+    async function loadMenuPhotos() {
+      const data = await getCachedJson<{
+        menuPhotos?: MenuPhotoRow[];
+      }>(`/api/restaurants/${restaurantId}`, 10_000);
+
+      if (mounted) {
+        setMenuPhotos(data.menuPhotos ?? []);
+      }
+    }
+
+    loadMenuPhotos().catch(() => {
+      if (mounted) {
+        setMenuPhotos([]);
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [authenticated, restaurantId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -134,6 +164,24 @@ export function NewVisitForm({ restaurantId }: { restaurantId: string }) {
       {configured && !loading && !authenticated ? <LoginRequired /> : null}
       {configured && authenticated ? (
         <form noValidate onSubmit={handleSubmit} className="mt-6 grid max-w-xl gap-4">
+          {menuPhotos.length > 0 ? (
+            <section className="grid gap-2 border border-line bg-white/60 p-3">
+              <h2 className="text-base font-semibold">메뉴 사진</h2>
+              <div className="flex gap-2 overflow-x-auto">
+                {menuPhotos.map((photo) =>
+                  photo.signedUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={photo.id}
+                      src={photo.signedUrl}
+                      alt=""
+                      className="h-32 w-24 shrink-0 border border-line bg-white object-cover"
+                    />
+                  ) : null,
+                )}
+              </div>
+            </section>
+          ) : null}
           <Field label="날짜" required>
             <DateSelectInput name="visitedAt" defaultValue={todayDateValue()} />
           </Field>

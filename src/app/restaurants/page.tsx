@@ -23,11 +23,13 @@ import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
 import { cuisineOptions, foodTypeOptions } from "@/lib/restaurant-options";
 import type { RestaurantRow } from "@/lib/supabase/types";
 import { useAppSession } from "@/lib/use-app-session";
+import { compareVisitsByRecency, visitRecencyValue } from "@/lib/visit-sort";
 
 type RestaurantListVisit = {
   restaurant_id: string;
   visited_at: string;
   created_at?: string;
+  meal_type?: "breakfast" | "lunch" | "dinner" | "other";
 };
 
 type RecentVisit = {
@@ -60,27 +62,10 @@ const visitFilterOptions = [
   { value: "unvisited", label: "미방문" },
 ] as const;
 
-const locationFilterOptions = [
-  { value: "all", label: "전체" },
-  { value: "located", label: "지도 위치 있음" },
-  { value: "unlocated", label: "지도 위치 없음" },
-] as const;
-
 const restaurantNameCollator = new Intl.Collator("ko-KR", {
   numeric: true,
   sensitivity: "base",
 });
-
-function compareVisitRecency(left: RestaurantListVisit, right: RestaurantListVisit) {
-  return visitSortValue(right) - visitSortValue(left);
-}
-
-function visitSortValue(visit: RestaurantListVisit) {
-  const visitedAt = new Date(visit.visited_at).getTime();
-  const createdAt = visit.created_at ? new Date(visit.created_at).getTime() : 0;
-
-  return visitedAt + createdAt / 10 ** 15;
-}
 
 export default function RestaurantsPage() {
   const router = useRouter();
@@ -99,8 +84,6 @@ export default function RestaurantsPage() {
   const [selectedFoodTypes, setSelectedFoodTypes] = useState<string[]>([]);
   const [visitFilter, setVisitFilter] =
     useState<(typeof visitFilterOptions)[number]["value"]>("all");
-  const [locationFilter, setLocationFilter] =
-    useState<(typeof locationFilterOptions)[number]["value"]>("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState("");
@@ -164,9 +147,9 @@ export default function RestaurantsPage() {
     const latestVisitSortValue = (restaurantId: string) => {
       const latest = visits
         .filter((visit) => visit.restaurant_id === restaurantId)
-        .sort(compareVisitRecency)[0];
+        .sort(compareVisitsByRecency)[0];
 
-      return latest ? visitSortValue(latest) : 0;
+      return latest ? visitRecencyValue(latest) : 0;
     };
     const normalized = query.trim().toLowerCase();
     const filtered = !normalized
@@ -180,9 +163,6 @@ export default function RestaurantsPage() {
       const restaurantCuisines = parseMultiValue(restaurant.cuisine_category ?? "");
       const restaurantFoodTypes = parseMultiValue(restaurant.food_type ?? "");
       const restaurantVisitCount = countVisits(restaurant.id);
-      const hasLocation =
-        typeof restaurant.latitude === "number" &&
-        typeof restaurant.longitude === "number";
 
       if (
         selectedCuisines.length > 0 &&
@@ -203,14 +183,6 @@ export default function RestaurantsPage() {
       }
 
       if (visitFilter === "unvisited" && restaurantVisitCount > 0) {
-        return false;
-      }
-
-      if (locationFilter === "located" && !hasLocation) {
-        return false;
-      }
-
-      if (locationFilter === "unlocated" && hasLocation) {
         return false;
       }
 
@@ -238,7 +210,6 @@ export default function RestaurantsPage() {
       );
     });
   }, [
-    locationFilter,
     query,
     restaurants,
     selectedCuisines,
@@ -259,7 +230,7 @@ export default function RestaurantsPage() {
   function lastVisitTime(restaurantId: string) {
     const latest = visits
       .filter((visit) => visit.restaurant_id === restaurantId)
-      .sort(compareVisitRecency)[0];
+      .sort(compareVisitsByRecency)[0];
 
     return latest ? new Date(latest.visited_at).getTime() : 0;
   }
@@ -268,19 +239,16 @@ export default function RestaurantsPage() {
     setSelectedCuisines([]);
     setSelectedFoodTypes([]);
     setVisitFilter("all");
-    setLocationFilter("all");
   }
 
   const hasActiveFilters =
     selectedCuisines.length > 0 ||
     selectedFoodTypes.length > 0 ||
-    visitFilter !== "all" ||
-    locationFilter !== "all";
+    visitFilter !== "all";
   const activeFilterCount =
     selectedCuisines.length +
     selectedFoodTypes.length +
-    (visitFilter !== "all" ? 1 : 0) +
-    (locationFilter !== "all" ? 1 : 0);
+    (visitFilter !== "all" ? 1 : 0);
 
   function restaurantLabel(restaurantId: string) {
     const restaurant = restaurants.find((item) => item.id === restaurantId);
@@ -400,7 +368,7 @@ export default function RestaurantsPage() {
           </div>
 
           {filtersOpen ? (
-            <div className="mt-3 grid max-w-5xl gap-3 border border-line bg-white/60 p-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_160px_180px_auto]">
+            <div className="mt-3 grid max-w-5xl gap-3 border border-line bg-white/60 p-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_160px_auto]">
               <MultiSelectField
                 name="cuisineFilter"
                 options={cuisineOptions}
@@ -424,20 +392,6 @@ export default function RestaurantsPage() {
                 }
               >
                 {visitFilterOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </SelectInput>
-              <SelectInput
-                value={locationFilter}
-                onChange={(event) =>
-                  setLocationFilter(
-                    event.target.value as (typeof locationFilterOptions)[number]["value"],
-                  )
-                }
-              >
-                {locationFilterOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

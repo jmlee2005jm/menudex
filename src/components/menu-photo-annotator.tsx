@@ -31,6 +31,12 @@ export function MenuPhotoAnnotator({
   const [draft, setDraft] = useState<DraftRect>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [highlightSaving, setHighlightSaving] = useState(false);
+  const [touchPreview, setTouchPreview] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const [error, setError] = useState("");
 
   const sortedAnnotations = useMemo(
@@ -57,6 +63,7 @@ export function MenuPhotoAnnotator({
     event.currentTarget.setPointerCapture(event.pointerId);
     setError("");
     setDragStart(point);
+    updateTouchPreview(event, point);
     setDraft({ x: point.x, y: point.y, width: 0, height: 0 });
   }
 
@@ -72,6 +79,7 @@ export function MenuPhotoAnnotator({
       return;
     }
 
+    updateTouchPreview(event, point);
     setDraft(normalizeRect(dragStart, point));
   }
 
@@ -82,6 +90,7 @@ export function MenuPhotoAnnotator({
 
     event.preventDefault();
     setDragStart(null);
+    setTouchPreview(null);
 
     if (draft.width < 0.005 || draft.height < 0.005) {
       setDraft(null);
@@ -131,6 +140,7 @@ export function MenuPhotoAnnotator({
   function cancelHighlight() {
     setDraft(null);
     setDragStart(null);
+    setTouchPreview(null);
     setAdding(false);
     setError("");
   }
@@ -178,6 +188,24 @@ export function MenuPhotoAnnotator({
     };
   }
 
+  function updateTouchPreview(
+    event: PointerEvent<HTMLDivElement>,
+    point: { x: number; y: number },
+  ) {
+    const rect = containerRef.current?.getBoundingClientRect();
+
+    if (!rect || event.pointerType !== "touch") {
+      return;
+    }
+
+    setTouchPreview({
+      x: point.x,
+      y: point.y,
+      width: rect.width,
+      height: rect.height,
+    });
+  }
+
   return (
     <div className="border border-line bg-white/70 p-3">
       {photo.signedUrl ? (
@@ -218,6 +246,21 @@ export function MenuPhotoAnnotator({
               className="absolute border border-yellow-500/80 bg-yellow-300/45"
               style={rectStyle(draft)}
             />
+          ) : null}
+          {touchPreview && photo.signedUrl ? (
+            <div className="pointer-events-none absolute left-2 top-2 z-10 h-24 w-32 overflow-hidden border-2 border-yellow-400 bg-white shadow-lg sm:hidden">
+              <div
+                className="h-full w-full"
+                style={{
+                  backgroundImage: `url(${photo.signedUrl})`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundSize: `${touchPreview.width * 2}px ${touchPreview.height * 2}px`,
+                  backgroundPosition: `calc(50% - ${touchPreview.x * touchPreview.width * 2}px) calc(50% - ${touchPreview.y * touchPreview.height * 2}px)`,
+                }}
+              />
+              <div className="absolute left-1/2 top-1/2 h-5 w-px -translate-x-1/2 -translate-y-1/2 bg-yellow-500" />
+              <div className="absolute left-1/2 top-1/2 h-px w-5 -translate-x-1/2 -translate-y-1/2 bg-yellow-500" />
+            </div>
           ) : null}
         </div>
       ) : (

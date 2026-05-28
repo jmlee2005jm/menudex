@@ -1,116 +1,48 @@
 # MenuDex
 
-MenuDex is a personal restaurant/menu memory app by **JM Lee**.
+Personal restaurant/menu memory app by **JM Lee**.
 
-The core workflow is simple: save a restaurant, add menu photos, log what was tried, and later mark tried items on menu photos with editable highlight overlays. MenuDex is a private log and memory aid, not a challenge judge.
+Goal: remember restaurants, menu photos, tried menus, ratings. App = log, not judge.
 
-## Current Status
+Main flow:
 
-The app uses Supabase as the source of truth, but no longer uses Supabase Auth
-for local app login. MenuDex now starts with Switch-style profile selection for
-a small trusted friend group.
+```text
+프로필 선택 -> 식당 목록 -> 식당 상세 -> 메뉴 사진/방문 기록 -> 방문 기록 추가 -> 하이라이트
+```
 
-Implemented:
+## Status
 
-- Korean-first UI.
-- `/` redirects to `/profiles`.
-- `/` redirects to `/restaurants` when a profile session already exists.
-- Switch-style profile selection with a signed HttpOnly session cookie.
-- Supabase-backed restaurant list and restaurant creation.
-- Supabase-backed manual menu item creation.
-- Supabase Storage upload for menu photos.
-- HEIC/HEIF menu photos are converted to JPEG in the browser before upload.
-- HEIC/HEIF menu photos are converted before the crop UI opens, so desktop HEIC
-  files can be cropped instead of failing preview.
-- Menu photo uploads use a scan-style four-corner crop before saving, so angled
-  menu photos can be corrected into a rectangular image.
-- After confirming a crop, the selected image can be reopened for another crop
-  before the form is submitted.
-- Menu photos display at screen width without horizontal overflow.
-- Rectangular semi-transparent highlights can be drawn, confirmed, canceled, and deleted later.
-- Menu photo upload and optional manual menu entry share one `메뉴 추가` screen.
-- `메뉴 추가` can select multiple menu photos, crop them one by one, and save
-  them in a single request.
-- Cropped menu-photo batches show removable thumbnails before final submit, and
-  canceling a crop skips only the current photo.
-- Supabase-backed visit logging with meal type, one or more tried menus,
-  optional half-star ratings, and optional short reviews.
-- Visit menu entries without ratings are treated as `평가 대기` and are shown
-  prominently in the restaurant list reminder, recent visits, and restaurant detail.
-- Optional food photos are stored separately from menu photos and attached to
-  individual tried menus inside a visit.
-- New visit logging accepts separate photo inputs per menu row.
-- Saved visit photo thumbnails open a dark-background larger photo viewer.
-- Restaurant detail visit rows reserve a consistent photo slot; empty owned rows
-  show a small dotted `+` affordance for adding a menu photo.
-- Visit edit supports compact photo replace/delete controls inside the existing
-  review edit form.
-- Delete controls for accidental restaurant, menu photo, manual menu, and visit entries.
-- Inline edit controls for saved visit reviews.
-- Restaurant creation/edit supports optional multi-select cuisine categories, food
-  types, and manual icon upload.
-- Restaurant creation can optionally add an initial menu photo.
-- Confirm/submit buttons disable while requests are in flight to avoid duplicate
-  saves.
-- Menu photo and restaurant icon inputs support file selection and clipboard
-  image paste.
-- Restaurant edit shows the current icon preview when one exists.
-- Restaurant edit can delete the current restaurant icon.
-- Restaurant creation/edit supports Kakao place search and map-click pinning for
-  location selection.
-- `/restaurants` shows all coordinate-enabled restaurants on a compact Kakao map.
-- `/restaurants` map defaults to the current location at an approximately
-  neighborhood-level scale before the user interacts with it.
-- Restaurant detail shows that restaurant's location on Kakao Maps when coordinates exist.
-- `/map` provides a larger all-restaurant map view with a close default scale.
-- `/map` has search/category/location filters and defaults to restaurants with
-  saved coordinates.
-- Restaurant creation/edit stores optional latitude and longitude internally for
-  maps, but the UI does not show raw coordinate values.
-- Restaurants are shared across profiles.
-- Visits/reviews and highlights are profile-scoped.
-- Menu photos are owned by the profile that uploaded them; only that profile can delete them.
-- Restaurant list can sort by name, latest visit, or visit count, with a compact
-  arrow button for direction.
-- Restaurant list can filter by cuisine category, food type, visit status, and
-  map-location status. Filter defaults are intentionally broad so the existing
-  list remains unchanged until the user chooses a filter. Filters are collapsed
-  by default to keep the list compact.
-- `/restaurants` shows a compact recent visits panel with up to 4 visits and a
-  `더 보기` link to `/visits`.
-- The recent visits panel is height-limited inside the viewport and scrolls
-  internally if its contents are taller than the available space.
-- Recent visits support `내 최근` and `전체 최근` tabs and show the visiting profile.
-- Session/profile state is fetched once through a shared app provider, so the
-  header and page content do not duplicate session requests.
-- Short-lived sessionStorage caches are used for profile, restaurant list, and
-  restaurant detail GETs, with related cache entries cleared after writes.
-- The restaurant list API returns lightweight visit summary fields instead of
-  full nested visit payloads.
-- Server-side Supabase service-role API routes with owner checks.
-- Graceful Korean setup state when required env vars are missing.
+Built foundation:
 
-Not implemented yet:
+- Korean-first responsive app.
+- Switch-style profile select, signed HttpOnly session cookie.
+- Supabase source of truth. No Supabase Auth for app login now.
+- Shared restaurants. Profile-scoped visits/reviews/highlights.
+- Menu photo ownership by uploader profile.
+- Menu-photo flow: multi-upload, HEIC/HEIF convert, four-corner crop, reversible overlay highlight.
+- Visit flow: multiple menu rows, meal type, optional food photos, optional half-star rating/review, `평가 대기`.
+- Restaurant flow: categories, optional icon, sort/filter, recent visits, edit/delete, duplicate-submit lock.
+- Kakao Maps: place search, pin fallback, restaurant list map, detail map, large `/map`.
+- Client cache: session, restaurant list, restaurant detail.
+- Server API: Supabase service-role routes with owner/profile checks.
 
-- Linking annotations to visits/menu items.
-- Full auth route protection middleware.
+Not yet:
+
+- Link highlights to visit/menu rows.
+- Full auth middleware.
 - OCR.
-- Kakao map clustering.
+- Map clustering.
 
 ## Stack
 
 - Next.js App Router
-- React
-- TypeScript
+- React + TypeScript
 - Tailwind CSS
-- Vercel free tier for hosting
-- Supabase Free for Postgres and Storage
-- Shared restaurant data with profile-scoped visits/highlights
-- Zod later for validation at the data boundary
+- Vercel target
+- Supabase Free: Postgres + Storage
+- Kakao Maps JavaScript SDK
 
-## Supabase Setup
-
-Create a Supabase project, then set:
+## Env
 
 ```bash
 cp .env.example .env.local
@@ -124,15 +56,19 @@ MENUDEX_SESSION_SECRET=
 NEXT_PUBLIC_KAKAO_MAP_APP_KEY=
 ```
 
-Generate `MENUDEX_OWNER_ID` as any UUID. On macOS:
+`MENUDEX_OWNER_ID`: UUID.
 
 ```bash
 uuidgen | tr '[:upper:]' '[:lower:]'
 ```
 
-Use a long random string for `MENUDEX_SESSION_SECRET`.
+`MENUDEX_SESSION_SECRET`: long random string.
 
-Apply the schemas in order:
+Never expose `SUPABASE_SERVICE_ROLE_KEY` in browser code.
+
+## DB Setup
+
+Apply migrations in order:
 
 ```text
 supabase/migrations/0001_initial_schema.sql
@@ -145,229 +81,86 @@ supabase/migrations/0007_restaurant_coordinates.sql
 supabase/migrations/0008_visit_photos_per_menu.sql
 ```
 
-The first migration creates:
+Important DB shape:
 
-- app enums
-- app tables
-- RLS policies
-- private `menu-photos` Storage bucket
-- Storage object policy scoped by user ID folder
+- `restaurants`: shared restaurant data.
+- `profiles`: local friend profiles.
+- `menu_photos`: original menu photo metadata + Storage path.
+- `menu_annotations`: profile-scoped highlight overlays.
+- `visits`: date + meal type.
+- `visit_menu_items`: tried menu rows, rating/review.
+- `visit_photos`: food photos, attached to specific tried menu rows.
 
-The second migration removes direct `auth.users` foreign keys from owner columns.
-That lets the app use a synthetic `MENUDEX_OWNER_ID` without creating a Supabase
-Auth user. RLS policies remain in place for the future, but the current Next.js
-API routes use the service-role key and enforce owner checks in server code.
-
-The fourth migration creates profiles, seeds the first profile as `JM`, and assigns
-existing visits/photos/highlights to that profile.
-
-The seventh migration adds optional internal latitude/longitude fields for Kakao
-Maps. Restaurants without coordinates still work normally; they are simply
-omitted from the `/map` marker view.
-
-Menu photos are uploaded to paths like:
+Storage path:
 
 ```text
-{userId}/{restaurantId}/{uuid}.{extension}
+{ownerId}/{restaurantId}/{uuid}.{extension}
 ```
 
-For the current single-user version, the path starts with `MENUDEX_OWNER_ID`.
+## Kakao Maps
 
-Do not expose `SUPABASE_SERVICE_ROLE_KEY` to browser code. It is only used in
-server route handlers.
+Use Kakao JavaScript key, not REST key.
 
-## Kakao Maps Setup
-
-`/map` uses the Kakao Maps JavaScript SDK. Set `NEXT_PUBLIC_KAKAO_MAP_APP_KEY`
-to the Kakao JavaScript key, not the REST API key.
-
-In Kakao Developers, register the local and deployed domains that will load the
-map, for example:
+Register domains:
 
 ```text
 http://localhost:3000
 https://your-vercel-domain.vercel.app
 ```
 
-Kakao Maps also needs the Maps/Local service enabled for the app. If Kakao
-returns `disabled OPEN_MAP_AND_LOCAL service`, enable the 지도/로컬 product for
-the app in Kakao Developers. After changing the key, service, or allowed domains,
-restart the Next.js dev server.
+Enable Kakao 지도/로컬 product. Restart dev server after key/domain/service change.
 
 ## Product Rules
 
-- Menu photos are central.
-- Original menu photos must not be edited destructively.
-- Highlights should be stored separately as normalized overlay coordinates.
-- Highlight coordinates are normalized to image size so they stay aligned across mobile and desktop.
-- Rectangular highlights are only the first pass. Later highlighting should support less perfectly aligned menu photos, likely through freehand/brush strokes or polygon highlights.
-- Full typed menu entry is optional.
-- Repeated menus are allowed; this app records behavior, it does not enforce challenge rules.
+- Menu photos central.
+- Never burn highlights into image files.
+- Highlights = normalized overlay data.
+- Typed full menu optional.
+- Repeat menu allowed.
 - Branches can be separate restaurants.
-- Restaurant address and external map links are intentionally omitted from the UI.
-- Kakao Maps location selection uses place search first, with map-click pinning
-  as the fallback.
-- New restaurant location maps default to the user's current location when the
-  browser grants geolocation, but do not auto-save coordinates.
-- Restaurant cards show visit count and latest visit instead of menu coverage.
-- Restaurant cards show `해금된 메뉴 x/y`, where `x` is the selected profile's
-  unique tried menu names and `y` is the restaurant's optional `목표 메뉴 수`.
-- If `목표 메뉴 수` is not entered yet, the card shows `해금된 메뉴 x/?`.
-- Restaurant name and branch/place are displayed as separate text treatments.
-- Restaurant categories are split into broad cuisine and food/service type.
-- Category filter order follows the app's shared cuisine and food/service option
-  lists; default filters show all matching restaurants.
-- Restaurant icons are manually uploaded by the user; no logo scraping is used.
-- Restaurant icon deletion is supported from the edit screen.
-- Restaurants without icons display as text-only rows instead of placeholder
-  icon boxes.
-- Submit buttons should lock immediately after the first press for create/update
-  operations.
-- The first screen is profile selection. Add friends through `프로필 추가`.
-- The selected profile is shown in the header on every view except profile selection.
-- Profiles can be edited or deleted from the profile selection screen.
-- Profile and restaurant icons open a square crop editor before upload.
-- Menu photos open a four-corner crop editor before upload; the selected area is
-  saved as a corrected rectangular JPEG while preserving the original local file.
-- Cropping can be reopened after confirmation if the user notices a mistake
-  before submitting the form.
-- Restaurant detail defaults to `내 기록`; `전체 기록` includes friends' visits.
-- Menu photo labels are intentionally omitted for now.
-- Menu item categories are intentionally omitted for now.
-- Accidental entries should be removable from the restaurant detail page.
-- Saved visit reviews should be editable without leaving the restaurant detail page.
-- The restaurant detail page treats `방문 기록 추가` as the primary action.
-- Restaurant cards use `n회 방문` wording and Korean-aware name sorting.
-- Visit logs include meal type: `breakfast`, `lunch`, `dinner`, or `other`.
-- Ratings support half-star values from `0.5` to `5`.
-- The visible app does not use menu coverage anymore; restaurant cards prioritize
-  visit count, unlocked menu progress, and latest visit instead.
+- Address/external map link omitted. Built-in Kakao map preferred.
+- Place search first, pin fallback.
+- Cards show visits/latest visit/`해금된 메뉴 x/y`; unknown total = `x/?`.
+- Icons optional. No logo scraping.
+- First screen = profile select.
+- Restaurant detail default = `내 기록`; `전체 기록` shows friends.
+- Menu photo labels omitted.
+- Menu item categories omitted.
+- `방문 기록 추가` = primary restaurant-detail action.
+- Rating = half-star, optional at log time. Missing rating = `평가 대기`.
 
-## UI Direction
-
-MenuDex should feel like a personal menu notebook, not a company dashboard.
-
-- Korean-first UI.
-- Mobile-first interactions.
-- Quiet, fast, and practical.
-- No landing-page feel unless the page is a login page.
-- Avoid heavy KPI cards, sales copy, corporate dashboards, and decorative gradients.
-- Prefer direct list/detail flows, large touch targets, restrained borders, and real user content.
-
-## Data Model
-
-The schema draft lives in `supabase/migrations/0001_initial_schema.sql`.
-Maintenance notes and cleanup history live in `docs/maintenance.md`.
-
-The eighth migration links visit photos to individual `visit_menu_items` so one
-visit can contain multiple menus without sharing the same food photos across all
-menu reviews.
-
-Core tables:
-
-- `restaurants`: shared restaurant records with name, optional branch, notes,
-  categories, icon, optional total menu goal, and optional map coordinates.
-- `menu_photos`: original menu photo metadata with private Storage path.
-- `menu_annotations`: editable highlight overlays for menu photos.
-- `menu_items`: optional structured menu records with name, optional price, and active/inactive state.
-- `visits`: restaurant visits with date and meal type.
-- `visit_photos`: optional food photos attached to a visit and, for new data,
-  to a specific tried menu row.
-- `visit_menu_items`: menus tried during visits, with optional structured menu item link, manual name, rating, and review.
-
-Ownership:
-
-- `restaurants.user_id` keeps shared restaurant records under `MENUDEX_OWNER_ID`.
-- `visits.profile_id` scopes visits and reviews to the selected profile.
-- `menu_annotations.profile_id` scopes highlights to the selected profile.
-- `menu_photos.owner_profile_id` records which profile uploaded a menu photo.
-- Deleting a profile removes that profile's visits, highlights, icon, and uploaded menu photos.
-
-## App Structure
+## App Shape
 
 ```text
 src/
   app/
-    page.tsx
-    profiles/page.tsx
-    login/page.tsx
-    api/
-      session/route.ts
-      restaurants/
-      visits/route.ts
-    map/page.tsx
+    profiles/
     restaurants/
-      page.tsx
-      new/page.tsx
-      [restaurantId]/
-        edit/
-        page.tsx
-        restaurant-detail.tsx
-        menus/new/
-        visits/new/
+    visits/
+    map/
+    api/
   components/
-    app-state.tsx
-    form-fields.tsx
-    kakao-map.tsx
-    menu-photo-annotator.tsx
-    page-shell.tsx
-    rating-field.tsx
   lib/
-    api.ts
-    app-auth.ts
-    date.ts
-    domain.ts
-    image-crop.ts
-    use-app-session.ts
-    supabase/
-      admin.ts
-      types.ts
 docs/
-  maintenance.md
-supabase/
-  migrations/
-    0001_initial_schema.sql
-    0002_single_user_owner.sql
+supabase/migrations/
 scripts/
-  smoke-web.mjs
 ```
 
-## Next Implementation Steps
+Key docs:
 
-1. Add generated Supabase database types for route handlers.
-2. Add edit flows.
-3. Add menu photo viewer.
-4. Add Kakao map clustering/filtering when there are many restaurants.
-5. Add freehand or polygon highlight support for tilted/non-rectangular menu photos.
-6. Link highlights to visits or tried menu rows.
-7. Replace app-password auth with real multi-user auth when needed.
+- `MENUDEX_PROMPT.md`: working rules.
+- `docs/maintenance.md`: important cleanup log.
+- `docs/gamification.md`: game-mode ideas.
 
-## Local Development
-
-Install dependencies:
+## Dev
 
 ```bash
 npm install
-```
-
-Run the dev server:
-
-```bash
 npm run dev
-```
-
-Smoke-test the running web app:
-
-```bash
 npm run smoke:web
-```
-
-Run static checks:
-
-```bash
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-When running `npm run build`, stop the dev server first. Running `next build` while `next dev` is serving can leave `.next` in a stale state.
+Stop dev server before `npm run build` when possible. Stale `.next` can confuse build.

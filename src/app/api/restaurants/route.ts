@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAppSession } from "@/lib/api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sortVisitsByRecency } from "@/lib/visit-sort";
 
 export async function GET() {
   const auth = await requireAppSession();
@@ -27,7 +28,7 @@ export async function GET() {
         .order("updated_at", { ascending: false }),
       supabase
         .from("visits")
-        .select("restaurant_id, visited_at, created_at")
+        .select("restaurant_id, visited_at, created_at, meal_type")
         .eq("user_id", ownerId)
         .eq("profile_id", auth.session.profileId),
       supabase
@@ -44,7 +45,7 @@ export async function GET() {
         .eq("profile_id", auth.session.profileId)
         .order("visited_at", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(4),
+        .limit(24),
       supabase
         .from("visits")
         .select(
@@ -53,7 +54,7 @@ export async function GET() {
         .eq("user_id", ownerId)
         .order("visited_at", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(4),
+        .limit(24),
     ]);
 
   const error =
@@ -77,8 +78,12 @@ export async function GET() {
     restaurants,
     unlockedMenuCounts: countUnlockedMenusByRestaurant(unlockedMenusResult.data ?? []),
     pendingReviewCount: countPendingReviews(unlockedMenusResult.data ?? []),
-    recentVisits: await addSignedVisitPhotoUrls(supabase, recentVisitsResult.data ?? []),
-    allRecentVisits: await addSignedVisitPhotoUrls(supabase, allRecentVisitsResult.data ?? []),
+    recentVisits: sortVisitsByRecency(
+      await addSignedVisitPhotoUrls(supabase, recentVisitsResult.data ?? []),
+    ).slice(0, 4),
+    allRecentVisits: sortVisitsByRecency(
+      await addSignedVisitPhotoUrls(supabase, allRecentVisitsResult.data ?? []),
+    ).slice(0, 4),
     visits: visitsResult.data ?? [],
   });
 }

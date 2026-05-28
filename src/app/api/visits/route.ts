@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAppSession } from "@/lib/api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sortVisitsByRecency } from "@/lib/visit-sort";
 
 export async function GET(request: Request) {
   const auth = await requireAppSession();
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    visits: await addSignedVisitPhotoUrls(supabase, data ?? []),
+    visits: sortVisitsByRecency(await addSignedVisitPhotoUrls(supabase, data ?? [])),
   });
 }
 

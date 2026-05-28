@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assertRestaurantOwner, requireAppSession } from "@/lib/api";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { MenuAnnotationRow } from "@/lib/supabase/types";
+import { sortVisitsByRecency } from "@/lib/visit-sort";
 
 export async function GET(
   request: Request,
@@ -89,7 +90,7 @@ export async function GET(
     },
     menuPhotos: profileFilteredPhotos,
     menuItems: (menuItemsResult.data ?? []).map(stripRestaurantJoin),
-    visits: await addSignedVisitPhotoUrls(supabase, visitsResult.data ?? []),
+    visits: sortVisitsByRecency(await addSignedVisitPhotoUrls(supabase, visitsResult.data ?? [])),
   });
 }
 

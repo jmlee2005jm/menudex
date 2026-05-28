@@ -9,8 +9,8 @@ import {
 } from "@/components/app-state";
 import { PageShell, SecondaryLink } from "@/components/page-shell";
 import { PhotoLightbox } from "@/components/photo-lightbox";
-import { RatingDisplay } from "@/components/rating-field";
-import { getCachedJson } from "@/lib/client-cache";
+import { RatingDisplay, RatingField } from "@/components/rating-field";
+import { clearCachedJson, getCachedJson } from "@/lib/client-cache";
 import { useAppSession } from "@/lib/use-app-session";
 
 type RecentVisit = {
@@ -43,7 +43,7 @@ const mealLabels = {
 };
 
 export default function VisitsPage() {
-  const { authenticated, loading, configured } = useAppSession();
+  const { authenticated, loading, configured, profile } = useAppSession();
   const [visitScope, setVisitScope] = useState<"mine" | "all">(() =>
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("scope") === "all"
@@ -54,6 +54,9 @@ export default function VisitsPage() {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState("");
   const [lightboxPhotoUrl, setLightboxPhotoUrl] = useState("");
+  const [ratingDrafts, setRatingDrafts] = useState<Record<string, string>>({});
+  const [ratingSubmittingId, setRatingSubmittingId] = useState("");
+  const [ratingError, setRatingError] = useState("");
 
   useEffect(() => {
     if (!authenticated) {
@@ -82,6 +85,7 @@ export default function VisitsPage() {
       }
 
       setVisits(data.visits ?? []);
+      setRatingDrafts({});
       setDataLoading(false);
     }
 
@@ -96,6 +100,55 @@ export default function VisitsPage() {
       mounted = false;
     };
   }, [authenticated, visitScope]);
+
+  async function submitRating(visit: RecentVisit, item: NonNullable<RecentVisit["visit_menu_items"]>[number]) {
+    const rating = ratingDrafts[item.id] ?? "";
+
+    if (!rating) {
+      setRatingError("별점을 선택하세요.");
+      return;
+    }
+
+    setRatingError("");
+    setRatingSubmittingId(item.id);
+    const form = new FormData();
+    form.set("visitId", visit.id);
+    form.set("visitMenuItemId", item.id);
+    form.set("menuName", menuName(item));
+    form.set("rating", rating);
+    form.set("review", item.review ?? "");
+
+    const response = await fetch(`/api/restaurants/${visit.restaurant_id}/visits`, {
+      method: "PATCH",
+      body: form,
+    });
+    const data = (await response.json()) as { error?: string };
+
+    if (!response.ok) {
+      setRatingError(data.error ?? "별점을 저장하지 못했습니다.");
+      setRatingSubmittingId("");
+      return;
+    }
+
+    setVisits((current) =>
+      current.map((currentVisit) =>
+        currentVisit.id === visit.id
+          ? {
+              ...currentVisit,
+              visit_menu_items: (currentVisit.visit_menu_items ?? []).map((currentItem) =>
+                currentItem.id === item.id
+                  ? { ...currentItem, rating: Number(rating) }
+                  : currentItem,
+              ),
+            }
+          : currentVisit,
+      ),
+    );
+    clearCachedJson("/api/restaurants");
+    clearCachedJson("/api/visits");
+    clearCachedJson(`/api/restaurants/${visit.restaurant_id}`);
+    setRatingSubmittingId("");
+  }
 
   return (
     <PageShell
@@ -130,6 +183,7 @@ export default function VisitsPage() {
           </div>
           {dataLoading ? <LoadingState /> : null}
           {dataError ? <p className="text-sm text-red-700">{dataError}</p> : null}
+          {ratingError ? <p className="text-sm font-semibold text-red-700">{ratingError}</p> : null}
           {visits.map((visit) => (
             <div
               key={visit.id}
@@ -188,7 +242,30 @@ export default function VisitsPage() {
                         ) : null}
                       </div>
                     </div>
-                    <RatingDisplay value={item.rating} />
+                    {visit.profile_id === profile?.id && !item.rating ? (
+                      <div className="grid gap-2 border-2 border-yellow-300 bg-yellow-50 p-2">
+                        <RatingField
+                          name={`rating-${item.id}`}
+                          value={ratingDrafts[item.id] ?? ""}
+                          onChange={(nextRating) =>
+                            setRatingDrafts((current) => ({
+                              ...current,
+                              [item.id]: nextRating,
+                            }))
+                          }
+                        />
+                        <button
+                          type="button"
+                          onClick={() => submitRating(visit, item)}
+                          disabled={ratingSubmittingId === item.id}
+                          className="min-h-10 bg-leaf px-3 text-sm font-semibold text-white disabled:bg-leaf/35"
+                        >
+                          {ratingSubmittingId === item.id ? "저장 중..." : "별점 남기기"}
+                        </button>
+                      </div>
+                    ) : (
+                      <RatingDisplay value={item.rating} />
+                    )}
                   </div>
                 ))}
               </div>
